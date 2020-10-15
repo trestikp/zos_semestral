@@ -9,8 +9,14 @@ clean:
 console:
 	${CC} ${PARAMS} -c src/console.c
 
-run: console
-	${CC} ${PARAMS} -o runfs src/main.c console.o
+file_sytem:
+	${CC} ${PARAMS} -c src/file_system.c
+
+fs_manager:
+	${CC} ${PARAMS} -c src/fs_manager.c
+
+run: console file_sytem fs_manager
+	${CC} ${PARAMS} -o runfs src/main.c console.o file_system.o fs_manager.o
 
 remove_o:
 	rm -f *.o

@@ -1,10 +1,11 @@
-#include "console.h"
 #include <stdio.h>
 #include <string.h>
+#include "console.h"
+#include "fs_manager.h"
 
 #define TOKEN_LIMIT 50
 
-uint8_t process_command(char* command_parts[3]) { 
+uint8_t process_command(char *command_parts[3]) { 
 	if(!strcmp(command_parts[0], "exit")) return 2;
 
 	if(!strcmp(command_parts[0], "cp")) {
@@ -37,6 +38,7 @@ uint8_t process_command(char* command_parts[3]) {
 	else if(!strcmp(command_parts[0], "load")) {
 	}
 	else if(!strcmp(command_parts[0], "format")) {
+			format(command_parts[1]);
 	}
 	else if(!strcmp(command_parts[0], "slink")) {
 	} else {
@@ -48,10 +50,11 @@ uint8_t process_command(char* command_parts[3]) {
 
 uint8_t run_console() {
 	char input[80] = {0}, *token, *saveptr;
-	char* command_parts[3];
+	char *command_parts[3];
 	uint8_t running = 1, token_count = 0;
 
-	printf("Welcome to ZOS.\n");
+	load_filesystem();
+
 	while(running) {
 		//memset(input, 0, 80); 
 		token_count = 0;
@@ -60,7 +63,8 @@ uint8_t run_console() {
 		printf("> ");
 		scanf(" %[^\n]s", input);
 
-		while((token = strtok_r(saveptr, " ", &saveptr)) && (token_count < TOKEN_LIMIT)) {
+		while((token = strtok_r(saveptr, " ", &saveptr)) && 
+		      (token_count < TOKEN_LIMIT)) {
 			if(token_count < 3)
 				command_parts[token_count] = token;
 			token_count++;
