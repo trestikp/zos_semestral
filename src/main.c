@@ -1,16 +1,20 @@
 #include "console.h"
 //remove following inc
 #include "file_system.h"
+#include "general_functions.h"
 //#include "fs_manager.h"
 
 uint8_t run(char *file_name) {
-	extern FILE *fs_file;
+	FILE *fs_file = NULL;
+	extern char *fs_filename;
 
 	printf("Welcome to ZOS semestral shell.\n");
 
+	/*
 	if((fs_file = fopen(file_name, "r"))) {
 		// if file exists, reopen for reading/ writing
-		if(!freopen(file_name, "ab+", fs_file)) {
+		//if(!freopen(file_name, "ab+", fs_file)) { // ab+ ????
+		if(!freopen(file_name, "wb+", fs_file)) { // ab+ ????
 			printf("ERROR: Failed to reopen file for writing.");
 			return 1;
 		}
@@ -20,10 +24,16 @@ uint8_t run(char *file_name) {
  		if(!(fs_file = fopen(file_name, "wb+")))
 			printf("ERROR: Failed to open file.");
  	}
+	*/
+
+	if(!(fs_file = fopen(file_name, "r"))) {
+		printf("INFO: File does not exist. Run \"format\" to\
+ initialize new filesystem in %s\n", file_name);
+	}
+		
+	fs_filename = file_name;
 
 	run_console();
-
-	//create_filesystem(f, 170553);
 
 	return 0;
 }

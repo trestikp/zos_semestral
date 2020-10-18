@@ -50,6 +50,7 @@ typedef struct directory__item {
 } directory_item;
 
 
-uint8_t create_filesystem(FILE *f, uint64_t max_size);
+uint8_t create_filesystem(FILE *fs_file, uint64_t max_size);
+uint8_t make_directory(FILE *fs_file, char *name);
 
 #endif

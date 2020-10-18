@@ -5,23 +5,55 @@
 #include <string.h>
 
 superblock *sblock = NULL;
+inode *position = NULL;
+extern char *fs_filename;
+//extern FILE *fs_file; // REMOVE?
 
 //TODO: REMOVE LATER
 void print_superblock(superblock *sb) {
-	printf("size of supeblock: %ld\n", sizeof(superblock));
-	printf("size of inode: %ld\n", sizeof(inode));
 	printf("--------\n");
+	printf("size of supeblock: %ld\n", sizeof(superblock));
+	printf("size of inode: %ld\n\n\n", sizeof(inode));
 	printf("ibmp address: %d\n", sb->bitmapi_start_address);
 	printf("bbmp address: %d\n", sb->bitmap_start_address);
 	printf("inodes address: %d\n", sb->inode_start_address);
-	printf("data address: %d\n", sb->data_start_address);
-	printf("--------\n");
+	printf("data address: %d\n\n", sb->data_start_address);
 	printf("block count: %d\n", sb->cluster_count);
 	printf("--------\n");
 }
 
-// na 1 inode 5 bloku
-// 1B inodu -> 5B blocku = 6B celkove
+/*
+	Finds and allocates* free inode in bitmap
+	returns: 0 - no inode is free
+		address of inode in bits from bitmap start otherwise
+*/
+uint64_t allocate_free_inode(FILE *fs_file) {
+	// returns address in bits from bitmap address
+	uint64_t address = 0;
+	uint8_t byte = 0x00;
+	int i = 0;
+
+
+	fseek(fs_file, sblock->bitmapi_start_address, SEEK_SET);
+	while(address <= ((sblock->bitmap_start_address - 
+		  	   sblock->bitmapi_start_address) * 8)) {
+		byte = fgetc(fs_file);
+		for(i = (sizeof(uint8_t) * 8 - 1); i >= 0; i--) {
+			address++;
+
+			if(!(byte & (1 << i))) {
+				byte |= (1 << i);
+				fseek(fs_file, -1, SEEK_CUR);
+				fputc(byte, fs_file);
+
+				return address;
+			}
+		}
+		//address += 8;
+	}
+
+	return 0;
+}
 
 /*
 	Returns number of bytes needed for bitmapi (inode bitmap)
@@ -71,7 +103,8 @@ superblock *create_superblock(uint64_t max_size) {
 	
 	sb->disk_size = size;
 	sb->cluster_size = BLOCK_SIZE;
-	sb->bitmapi_start_address = sizeof(superblock) + 1;
+	//sb->bitmapi_start_address = sizeof(superblock) + 1; //dunno about + 1 file index from 0?
+	sb->bitmapi_start_address = sizeof(superblock);
 	sb->bitmap_start_address = sb->bitmapi_start_address + ibmp_size;
 	sb->inode_start_address = sb->bitmapi_start_address + ibmp_size +
 				  bbmp_size;
@@ -87,30 +120,105 @@ superblock *create_superblock(uint64_t max_size) {
 	return sb;
 }
 
-uint8_t create_filesystem(FILE *f, uint64_t max_size) {
-	//165432 - exact size for 4B ibmp, 20B bbmp
-	//173625 - 4B ibmp, 21B bbmp
-	//206718 - exact size for 5B ibmp, 25B bbmp
-	//superblock *sb = create_superblock(165432);
-	//superblock *sb = create_superblock(173625);
-	//superblock *sb = create_superblock(206718);
-	//superblock *sb = create_superblock(206717);
-	//superblock *sb = create_superblock(206719);
-	//superblock *sb = create_superblock(206396);
-	//170553 - 4B ibmp, 21B bbmp - 5 blocks 
-	//superblock *sb = create_superblock(170553);
-	//superblock *sb = create_superblock(170552);
-	//superblock *sb = create_superblock(max_size);
+uint8_t create_filesystem(FILE *fs_file, uint64_t max_size) {
+	int i = 0;
+	inode *node = NULL;
+	directory_item *ditem = NULL;
+
 	sblock = create_superblock(max_size);
 	if(!sblock) {
-		//TODO: memory freeing, program exit error code
+		//TODO: memory freeing?, program exit error code
 		return 1;
 	}
 	print_superblock(sblock);
 
-	fseek(f, 0, SEEK_SET);
-	printf("position in file is: %ld\n", ftell(f));
-	fwrite(sblock, sizeof(superblock), 1, f);
+	fseek(fs_file, 0, SEEK_SET);
+	fwrite(sblock, sizeof(superblock), 1, fs_file);
+
+	printf("IBMP WRITE: %ld\n", ftell(fs_file));
+	//first inode bmp byte (root)
+	fputc(0x80, fs_file);
+	//fwrite? 
+	for(i = 0; i < (sblock->bitmap_start_address -
+	sblock->bitmapi_start_address - 1); i++) {
+		fputc(0x00, fs_file);
+	}
+
+	printf("BBMP WRITE: %ld\n", ftell(fs_file));
+	//first block bmp byte(root)
+	fputc(0x80, fs_file);
+	for(i = 0; i < (sblock->inode_start_address -
+	sblock->bitmap_start_address - 1); i++) {
+		fputc(0x00, fs_file);
+	}
+
+	//first inode
+	node = malloc(sizeof(inode));
+	node->nodeid = 1;
+	node->isDirectory = true;
+	node->references = 1;
+	node->direct1 = sblock->data_start_address;
+
+	printf("INODE WRITE: %ld\n", ftell(fs_file));
+	fwrite(node, sizeof(inode), 1, fs_file);
+
+	node->references = 0;
+	node->isDirectory = false;
+
+	for(i = 1; i < ((sblock->bitmap_start_address -
+	sblock->bitmapi_start_address) * 8); i++) {
+		node->nodeid = i + 1;
+		fwrite(node, sizeof(inode), 1, fs_file);
+	}
+
+	free(node);
+	//the rest of inodes
+	//node->nodeid = ID_ITEM_FREE;
+	//reset other variables?
+	/*
+	fwrite(node, sizeof(inode), ((sblock->bitmap_start_address -
+		sblock->bitmapi_start_address) * 8), fs_file);
+	*/
+	//fwrite refuses to work correctly with this..
+	/*
+	for(i = 0; i < ((sblock->bitmap_start_address -
+	sblock->bitmapi_start_address) * 8 * sizeof(inode) -
+	sizeof(inode)); i++) {
+		fputc(0x00, fs_file);
+	}
+	*/
+
+
+	//first block
+	ditem = malloc(sizeof(directory_item));
+	ditem->inode = 1;
+	ditem->item_name[0] = '/';
+	ditem->item_name[1] = 0x00;
+
+	printf("BLOCK WRITE: %ld\n", ftell(fs_file));
+	fwrite(ditem, sizeof(directory_item), 1, fs_file);
+	for(i = 0; i < (sblock->cluster_size *
+	sblock->cluster_count - sizeof(ditem)); i++) {
+		fputc(0x00, fs_file);
+	}
+
+	free(ditem);
+
+	return 0;
+}
+
+uint8_t make_directory(FILE *fs_file, char *name) {
+	uint64_t pos = 0;
+
+	inode *new = malloc(sizeof(inode));
+	return_error_on_condition(!new, "Failed to allocate RAM.",
+				  OUT_OF_MEMORY_ERROR);
+
+	pos = allocate_free_inode(fs_file);
+	fseek(fs_file, (sblock->inode_start_address + pos * sizeof(inode)), SEEK_SET);
+	fread(new, sizeof(inode), 1, fs_file);
+
+	printf("pos: %ld\nid: %d\n", pos, new->nodeid);
 
 	return 0;
 }
