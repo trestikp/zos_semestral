@@ -35,6 +35,10 @@ uint8_t process_command(char *command_parts[3]) {
 	else if(!strcmp(command_parts[0], "rmdir")) {
 	}
 	else if(!strcmp(command_parts[0], "ls")) {
+		if(!command_parts[1]) return 3;
+		if(command_parts[2] != NULL) return 4;
+		ls(command_parts[1]);
+
 	}
 	else if(!strcmp(command_parts[0], "cat")) {
 	}

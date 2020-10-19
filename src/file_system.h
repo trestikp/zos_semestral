@@ -11,6 +11,7 @@
 
 #define ID_ITEM_FREE 0
 #define BLOCK_SIZE 1024
+#define MAX_ITEM_NAME_LENGTH 12
 
 #define DEFAULT_SIGNATURE "trestikp"
 #define DEFAULT_DESCRIPTION "This is a semestral work for KIV/ZOS.\
@@ -50,7 +51,8 @@ typedef struct directory__item {
 } directory_item;
 
 
-uint8_t create_filesystem(FILE *fs_file, uint64_t max_size);
-uint8_t make_directory(FILE *fs_file, char *name);
+int create_filesystem(uint64_t max_size);
+int make_directory(char *name);
+int list_dir_contents(inode *target);
 
 #endif

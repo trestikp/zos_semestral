@@ -9,8 +9,10 @@
 #include "file_system.h"
 #include "general_functions.h"
 
-uint8_t load_filesystem();
-uint8_t format(char *size);
-uint8_t mkdir(char *dir_name);
+int load_filesystem();
+int format(char *size);
+int mkdir(char *dir_name);
+int ls(char *path);
+
 
 #endif

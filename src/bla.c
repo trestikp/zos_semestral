@@ -64,13 +64,20 @@ int main() {
 	*/
 
 	int i = 0;
-	//uint8_t n = 0xE0;
-	uint8_t n = 0x00;
-	FILE *f = fopen("./pokus.txt", "wb+");
+	uint8_t n = 0xE0;
+	//uint8_t n = 0x00;
+	FILE *f = fopen("./pokus.txt", "r");
+	printf("%d\n", fgetc(f));
+	printf("%d\n", fgetc(f));
+	printf("%d\n", fgetc(f));
+	printf("%d\n", fgetc(f));
+	printf("%d\n", fgetc(f));
+	/*
 	fputc(0x40, f);
 	fputc(0x40, f);
 	fputc(0x40, f);
 	fputc(0xE0, f);
+	*/
 	/*
 	for(i = 0; i < sizeof(uint8_t) * 8; i++) {
 		//printf("%u \n", (1 << (sizeof(uint8_t) * 8 - 1 - i)));
@@ -80,6 +87,7 @@ int main() {
 		}
 	}
 	*/
+	/*
 	fseek(f, 3, SEEK_SET);
 	n = fgetc(f);
 	printf("n: %d\n", n);
@@ -93,7 +101,14 @@ int main() {
 		}
 	}
 	printf("n: %d\n", n);
-	fputc(n, f);
+	//fputc(n, f);
+	*/
+
+	freopen(NULL, "rb+", f);
+	fputc(0xFF, f);
+	fputc(0xFF, f);
+	fputc(0xFF, f);
+	fputc(0xFF, f);
 	
 	return 0;
 }

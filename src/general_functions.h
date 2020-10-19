@@ -35,6 +35,7 @@
 #define OUT_OF_MEMORY_ERROR 1
 #define FILE_OPEN_ERROR "Failed to open file."
 #define FILE_REOPEN_ERROR_MESSAGE "Failed to reopen file for writing."
+#define MEMORY_ALLOCATION_ERROR_MESSAGE "Failed to allocate RAM."
 
 
 /**************************************/

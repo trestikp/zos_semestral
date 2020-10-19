@@ -5,14 +5,22 @@
 
 
 char *fs_filename = NULL;
+FILE *fs_file = NULL;
 extern superblock *sblock;
+extern inode *position;
 static bool fs_loaded = false;
 
 /*
 	Actually only loads superblock to global variable *sblock
 */
-uint8_t load_filesystem() {
-	FILE *fs_file = fopen(fs_filename, "r");
+int load_filesystem() {
+	sblock = malloc(sizeof(superblock));
+	return_error_on_condition(!sblock, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	position = malloc(sizeof(inode));
+	return_error_on_condition(!position,
+				  MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
 
 	fseek(fs_file, 0, SEEK_SET);
 
@@ -21,14 +29,19 @@ uint8_t load_filesystem() {
 		return 1;
 	}
 
+	fseek(fs_file, sblock->inode_start_address, SEEK_SET);
+	if((fread(position, sizeof(inode), 1, fs_file)) != 1) {
+		print_error("Failed to read root inode");
+		return 2;
+	}
+
 	fs_loaded = true;
-	fclose(fs_file);
 
 	return 0;
 }
 
-uint8_t format(char *size) {
-	FILE *fs_file = NULL;
+int format(char *size) {
+	//FILE *fs_file = NULL;
 	uint64_t max_size = 0;
 	int number = 0;
 	char units[3] = {0};
@@ -87,19 +100,29 @@ uint8_t format(char *size) {
 		return 7; // return some error number TODO
 	}
 
-	create_filesystem(fs_file, max_size);
+	create_filesystem(max_size);
 	fclose(fs_file);
 	free(vfs);
 
 	return 0;
 }
 
-uint8_t mkdir(char *dir_name) {
-	FILE *fs_file = fopen(fs_filename, "ab+");
+int mkdir(char *dir_name) {
+	//FILE *fs_file = fopen(fs_filename, "rb+");
 
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 
-	make_directory(fs_file, dir_name);
+	make_directory(dir_name);
 
+	return 0;
+}
+
+int ls(char *path) {
+	if(path[0] == '/') {
+		//TODO: path traversing from root, absolute path
+	} else {
+		//TODO: path traversing from current
+	}
+	
 	return 0;
 }
