@@ -7,7 +7,8 @@
 /*				      */
 /**************************************/
 
-
+#include <stdio.h>
+#include <stdlib.h>
 
 /**************************************/
 /* 				      */
@@ -62,5 +63,30 @@
 		printf("ERROR: %s\n", message);\
 		return ret_value;\
 	}
+
+
+
+/**************************************/
+/* 				      */
+/*	Structs  		      */
+/*				      */
+/**************************************/
+
+typedef struct llist_link{
+	void *data;
+	struct llist_link *next;
+} link;
+
+
+
+/**************************************/
+/* 				      */
+/*	Functions  		      */
+/*				      */
+/**************************************/
+
+int add_lifo(link **head, void *data);
+int add_fifo(link **head, void *data);
+void free_list(link *head);
 
 #endif

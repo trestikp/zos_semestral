@@ -1,12 +1,12 @@
-#ifndef _FS_MANAGER_H_
-#define _FS_MANAGER_H_
+#ifndef _FS_MANAGER_H
+#define _FS_MANAGER_H
 
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
 #include <math.h>
 #include <sys/statvfs.h>
-#include "file_system.h"
+#include "commands.h"
 #include "general_functions.h"
 
 int load_filesystem();

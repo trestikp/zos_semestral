@@ -1,17 +1,23 @@
-﻿#ifndef _FILE_SYSTEM_H_
-#define _FILE_SYSTEM_H_
+﻿#ifndef _FILE_SYSTEM_H
+#define _FILE_SYSTEM_H
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdbool.h>
 
-//experimental -- remove?
+#include "general_functions.h"
+//#include <stdio.h>
+//#include <stdlib.h>
 #include <string.h>
+//#include <sys/types.h>
+
+
 
 #define ID_ITEM_FREE 0
 #define BLOCK_SIZE 1024
 #define MAX_ITEM_NAME_LENGTH 12
+#define MAX_DIR_ITEMS_IN_BLOCK (int) (BLOCK_SIZE / sizeof(directory_item))
 
 #define DEFAULT_SIGNATURE "trestikp"
 #define DEFAULT_DESCRIPTION "This is a semestral work for KIV/ZOS.\
@@ -32,7 +38,7 @@ typedef struct super_block {
 
 typedef struct pseudo_inode {
     int32_t nodeid;                 //ID i-uzlu, pokud ID = ID_ITEM_FREE, je polozka volna
-    bool isDirectory;               //soubor, nebo adresar
+    int8_t isDirectory;             //0 = soubor, 1 = adresar, 2 = s. link
     int8_t references;              //počet odkazů na i-uzel, používá se pro hardlinky
     int32_t file_size;              //velikost souboru v bytech
     int32_t direct1;                // 1. přímý odkaz na datové bloky
@@ -50,9 +56,22 @@ typedef struct directory__item {
     char item_name[12];              //8+3 + /0 C/C++ ukoncovaci string znak
 } directory_item;
 
+/*
+superblock *sblock = NULL;
+inode *position = NULL;
+const inode *root = NULL;
+extern char *fs_filename;
+extern FILE *fs_file;
+*/
 
-int create_filesystem(uint64_t max_size);
-int make_directory(char *name);
-int list_dir_contents(inode *target);
+
+inode *load_inode_by_id(int32_t node_id);
+int32_t allocate_free_inode();
+int32_t allocate_free_block();
+
+//int create_filesystem(uint64_t max_size);
+//int make_directory(char *name, int32_t parent_nid);
+//int list_dir_contents(int32_t node_id );
+int search_dir(char *name, int32_t *from_nid);
 
 #endif

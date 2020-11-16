@@ -1,13 +1,10 @@
 #include "fs_manager.h"
-#include "general_functions.h"
-#include <math.h>
-#include <stdio.h>
-
 
 char *fs_filename = NULL;
 FILE *fs_file = NULL;
 extern superblock *sblock;
 extern inode *position;
+extern const inode *root;
 static bool fs_loaded = false;
 
 /*
@@ -34,6 +31,9 @@ int load_filesystem() {
 		print_error("Failed to read root inode");
 		return 2;
 	}
+
+	// hack it ... - loading to const
+	*(inode**) &root = position;
 
 	fs_loaded = true;
 
@@ -101,28 +101,71 @@ int format(char *size) {
 	}
 
 	create_filesystem(max_size);
-	fclose(fs_file);
+	load_filesystem();
+	//fclose(fs_file);
 	free(vfs);
 
 	return 0;
 }
 
-int mkdir(char *dir_name) {
-	//FILE *fs_file = fopen(fs_filename, "rb+");
+int traverse_path(char *path) {
+	char *token = NULL, *path_cpy = malloc(strlen(path) + 1);
+	int ret;
+	int32_t node_id = 0;
 
+	strcpy(path_cpy, path);
+
+	if(path[0] == '/') {
+		node_id = root->nodeid;
+		printf("ROOD ID: %d\n", root->nodeid);
+	} else {
+		node_id = position->nodeid;
+		printf("POSITION ID: %d\n", node_id);
+	}
+
+	token = strtok(path_cpy, "/");
+	while(token) {
+		switch(ret = search_dir(token, &node_id)){
+			case 0: printf("zero\n"); break;
+			case 1: printf("doesn't exsit\n"); break;
+			case 2: printf("isn't dir\n"); break;
+			default: ret = 1; printf("unknown error\n");
+		}
+
+		if(ret) break;
+
+		token = strtok(NULL, "/");
+	}
+
+	if(ret) {
+		return 0;
+	}
+
+	free(path_cpy);
+
+	return node_id;
+}
+
+int mkdir(char *dir_name) {
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 
-	make_directory(dir_name);
+	int parent_it = 0;
+	//traverse to dir name and set parent id
+	
+	make_directory(dir_name, parent_it);
 
 	return 0;
 }
 
 int ls(char *path) {
-	if(path[0] == '/') {
-		//TODO: path traversing from root, absolute path
-	} else {
-		//TODO: path traversing from current
+	int32_t end_nid = 0;
+	end_nid = traverse_path(path);
+
+	if(!end_nid) {
+		return 0;
 	}
+
+	list_dir_contents(end_nid);
 	
 	return 0;
 }
