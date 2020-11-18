@@ -28,19 +28,6 @@ extern FILE *fs_file;
 /**************************************/
 
 
-//TODO: REMOVE LATER
-void print_superblock(superblock *sb) {
-	printf("--------\n");
-	printf("size of supeblock: %ld\n", sizeof(superblock));
-	printf("size of inode: %ld\n\n\n", sizeof(inode));
-	printf("ibmp address: %d\n", sb->bitmapi_start_address);
-	printf("bbmp address: %d\n", sb->bitmap_start_address);
-	printf("inodes address: %d\n", sb->inode_start_address);
-	printf("data address: %d\n\n", sb->data_start_address);
-	printf("block count: %d\n", sb->cluster_count);
-	printf("--------\n");
-}
-
 inode *load_inode_by_id(int32_t node_id) {
 	inode *nd = malloc(sizeof(inode));
 	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
@@ -120,75 +107,35 @@ int32_t allocate_free_block() {
 /*				      */
 /**************************************/
 
+int append_dir_item(directory_item *di, inode *node) {
+	int counter = 0;
+	directory_item *temp = malloc(sizeof(directory_item));
+	return_error_on_condition(!temp, MEMORY_ALLOCATION_ERROR_MESSAGE,
+				  OUT_OF_MEMORY_ERROR);
 
-/*
-	Returns number of bytes needed for bitmapi (inode bitmap)
-*/
-superblock *create_superblock(uint64_t max_size) {
-	int ibmp_size = 0, bbmp_size = 0;
+	fseek(fs_file, sblock->data_start_address +
+	      (node->direct1 * sblock->cluster_size), SEEK_SET); //TODO: make sure its not direct1 - 1
+	fread(temp, sizeof(directory_item), 1, fs_file);
 
-	superblock *sb = malloc(sizeof(superblock));
-	return_error_on_condition(!sb, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
-	/*
-	if(!sb) {
-		//printf("Failed to create superblock. ERROR: Out of RAM");
-		//create some free all function?
-		return NULL;
-	}
-	*/
-
-	uint64_t size = sizeof(superblock);
-
-	// 6B bitmaps (+) -> 8 inodes + 40 blocks 
-	int cycle_increment = 6 + (8 * sizeof(inode)) + (40 * BLOCK_SIZE);
-
-	while((size + cycle_increment) <= max_size) {
-		size += cycle_increment;
-		sb->cluster_count += 40;
-		ibmp_size++;
-		bbmp_size += 5;
+	while(temp->inode && counter < MAX_DIR_ITEMS_IN_BLOCK) {
+		fread(temp, sizeof(directory_item), 1, fs_file);
+		counter++;
 	}
 
-	printf("size before block fill: %ld\n", size);
-
-	while((size + BLOCK_SIZE + 1) <= max_size) {
-		//printf("b\n");
-		bbmp_size++;
-		size++;
-		do{
-			size += BLOCK_SIZE;
-			sb->cluster_count++;
-		} while((size + BLOCK_SIZE) <= max_size && sb->cluster_count % 8);
+	if(counter >= MAX_DIR_ITEMS_IN_BLOCK) {
+		//print error
+		free(temp);
+		return 1;
 	}
+
+	fseek(fs_file, -sizeof(directory_item), SEEK_CUR);
+	fwrite(di, sizeof(directory_item), 1, fs_file);
+
+	free(temp);
 	
-	sb->disk_size = size;
-	sb->cluster_size = BLOCK_SIZE;
-	//sb->bitmapi_start_address = sizeof(superblock) + 1; //dunno about + 1 file index from 0?
-	sb->bitmapi_start_address = sizeof(superblock);
-	sb->bitmap_start_address = sb->bitmapi_start_address + ibmp_size;
-	sb->inode_start_address = sb->bitmapi_start_address + ibmp_size +
-				  bbmp_size;
-	sb->data_start_address = sb->bitmapi_start_address + ibmp_size +
-				 bbmp_size + (sizeof(inode) * (ibmp_size * 8));
-	sprintf(sb->signature, DEFAULT_SIGNATURE);
-	sprintf(sb->volume_descriptor, DEFAULT_DESCRIPTION);
-
-	printf("max size: %ld\n", max_size);
-	printf("size: %ld\n", size);
-	printf("size left: %ld\n\n", max_size - size);
-
-	return sb;
+	return 0;
 }
 
-void print_ls_record(inode *nd, char *name) {
-	switch(nd->isDirectory) {
-		case 0: printf("f\t"); break;
-		case 1: printf("d\t"); break;
-		case 2: printf("l\t"); break;
-	}
-
-	printf("%d\t%d\t%s\n", nd->file_size, nd->nodeid, name);
-}
 
 /**************************************/
 /* 				      */

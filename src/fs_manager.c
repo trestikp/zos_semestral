@@ -1,4 +1,6 @@
 #include "fs_manager.h"
+#include "file_system.h"
+
 
 char *fs_filename = NULL;
 FILE *fs_file = NULL;
@@ -108,51 +110,47 @@ int format(char *size) {
 	return 0;
 }
 
-int traverse_path(char *path) {
-	char *token = NULL, *path_cpy = malloc(strlen(path) + 1);
-	int ret;
-	int32_t node_id = 0;
+int extract_name_from_path(char *path, char **name) {
+        int len = strlen(path), off = len;
+        
+        while(path[off - 1] != '/' && off > 0) { 
+                off--;
+        } 
 
-	strcpy(path_cpy, path);
+        int diff = len - off;
 
-	if(path[0] == '/') {
-		node_id = root->nodeid;
-		printf("ROOD ID: %d\n", root->nodeid);
-	} else {
-		node_id = position->nodeid;
-		printf("POSITION ID: %d\n", node_id);
-	}
+        *name = calloc(sizeof(char), diff + 1);
+        
+        memcpy(*name, path + off, diff);
+        name[diff + 1] = 0x00;
+        
+        bzero(&path[off], diff);
+        
+        return 0;
+}	
 
-	token = strtok(path_cpy, "/");
-	while(token) {
-		switch(ret = search_dir(token, &node_id)){
-			case 0: printf("zero\n"); break;
-			case 1: printf("doesn't exsit\n"); break;
-			case 2: printf("isn't dir\n"); break;
-			default: ret = 1; printf("unknown error\n");
-		}
-
-		if(ret) break;
-
-		token = strtok(NULL, "/");
-	}
-
-	if(ret) {
-		return 0;
-	}
-
-	free(path_cpy);
-
-	return node_id;
-}
-
-int mkdir(char *dir_name) {
+int mkdir(char *path) {
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 
-	int parent_it = 0;
-	//traverse to dir name and set parent id
+	char *dir_name = calloc(sizeof(char), strlen(path) + 1);
+	memcpy(dir_name, path, strlen(path));
+
+	char *name_new = NULL;
+
+	printf("full path: %s\n", dir_name);
+	extract_name_from_path(dir_name, &name_new);
+	printf("searching for %s in %s\n", name_new, dir_name);
+
+	if(dir_name == NULL) printf("DIR NAME IS NUILL");
+	printf("DIR LEN: %ld\n", strlen(dir_name));
 	
-	make_directory(dir_name, parent_it);
+	int parent_id = traverse_path(dir_name);
+	if(!parent_id) return 1;
+	
+	printf("making dir at: %d\n", parent_id);
+	free(dir_name);
+	
+	//make_directory(dir_name, parent_it);
 
 	return 0;
 }

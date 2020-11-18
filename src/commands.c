@@ -14,13 +14,66 @@
 
 extern superblock *sblock;
 extern FILE *fs_file;
+extern const inode *root;
+extern const inode *position;
+
 
 /**************************************/
 /* 				      */
-/*	Support functions - general   */
+/*	Commands		      */
 /*				      */
 /**************************************/
 
+int32_t traverse_path(char *path) {
+        char *token = NULL, *path_cpy = NULL;
+        int ret = 0, on_way = 0;
+        int32_t node_id = 0;
+
+	printf("IM HERE\n");
+
+        if(path == NULL) {
+                path = malloc(2 * sizeof(char));
+                path[0] = '.';
+                path[1] = 0x00;
+        }
+
+        if(path[0] == '/') {
+                node_id = root->nodeid;
+                //printf("ROOD ID: %d\n", root->nodeid);
+        } else {
+                node_id = position->nodeid;
+                //printf("POSITION ID: %d\n", node_id);
+        }
+
+	printf("NOICE\n");
+
+        path_cpy = malloc(strlen(path) + 1);
+        strcpy(path_cpy, path);
+
+        token = strtok(path_cpy, "/");
+        while(token) {
+                switch(ret = search_dir(token, &node_id)){
+                        case 0: printf("zero\n"); break;
+                        case 1: printf("doesn't exsit\n"); break;
+                        case 2: printf("isn't dir\n"); break;
+                        default: ret = 1; printf("unknown error\n");
+                }
+
+                if(ret) {
+                        on_way = 1;
+                }
+
+                token = strtok(NULL, "/");
+        }
+
+        if(on_way) {
+                return 0;
+        }
+
+        free(path_cpy);
+
+        return node_id;
+}
 
 //TODO: REMOVE LATER
 void print_superblock(superblock *sb) {
@@ -36,13 +89,11 @@ void print_superblock(superblock *sb) {
 }
 
 
-/**************************************/
-/* 				      */
-/*	Support functions -	      */
-/*		command specific      */
-/*				      */
-/**************************************/
-
+/****************/
+/*		*/
+/*    format	*/
+/*		*/
+/****************/
 
 /*
 	Returns number of bytes needed for bitmapi (inode bitmap)
@@ -103,21 +154,6 @@ superblock *create_superblock(uint64_t max_size) {
 	return sb;
 }
 
-void print_ls_record(inode *nd, char *name) {
-	switch(nd->isDirectory) {
-		case 0: printf("f\t"); break;
-		case 1: printf("d\t"); break;
-		case 2: printf("l\t"); break;
-	}
-
-	printf("%d\t%d\t%s\n", nd->file_size, nd->nodeid, name);
-}
-
-/**************************************/
-/* 				      */
-/*	Command functions	      */
-/*				      */
-/**************************************/
 
 
 int create_filesystem(uint64_t max_size) {
@@ -207,10 +243,16 @@ int create_filesystem(uint64_t max_size) {
 	return 0;
 }
 
+/****************/
+/*		*/
+/*    mkdir	*/
+/*		*/
+/****************/
+
 int make_directory(char *name, int32_t parent_nid) {
 	//position is equivalent to nodeid
 	int32_t pos = 0;
-	inode *temp = NULL;
+	inode *new = NULL, *parent = NULL;
 
 	/*
 	inode *new = malloc(sizeof(inode));
@@ -223,45 +265,61 @@ int make_directory(char *name, int32_t parent_nid) {
 				  OUT_OF_MEMORY_ERROR);
 
 	pos = allocate_free_inode();
-	temp = load_inode_by_id(pos);
-	//fseek(fs_file, (sblock->inode_start_address + pos * sizeof(inode)), SEEK_SET);
-	//fread(new, sizeof(inode), 1, fs_file);
+	new = load_inode_by_id(pos);
+	return_error_on_condition(!new, MEMORY_ALLOCATION_ERROR_MESSAGE,
+				  OUT_OF_MEMORY_ERROR);
+	parent = load_inode_by_id(parent_nid);
+	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE,
+				  OUT_OF_MEMORY_ERROR);
 
-	temp->direct1 = allocate_free_block();
-	temp->isDirectory = 1;
-	temp->file_size = sblock->cluster_size;
-	temp->references = 1;
+	new->direct1 = allocate_free_block();
+	//TODO: free memory on condition!!
+	return_error_on_condition(!new->direct1, "failed to allocate free block", 2);
+
+	new->nodeid = pos;
+	new->isDirectory = 1;
+	new->file_size = sblock->cluster_size;
+	new->references = 1;
 
 	//fseek(fs_file, -(sizeof(inode)), SEEK_CUR);
 	fseek(fs_file, (sblock->inode_start_address +
-	      pos * sizeof(inode)), SEEK_SET);
-	fwrite(temp, sizeof(inode), 1, fs_file);
+	      (pos - 1) * sizeof(inode)), SEEK_SET); //TODO: make sure pos - 1
+	fwrite(new, sizeof(inode), 1, fs_file);
 	
-	//new inode written to FS, now load parent to add dir_item
-	//bzero(temp, sizeof(inode));
-	//fseek(fs_file, sblock->inode_start_address + (parent_nid - 1) * sizeof(inode), SEEK_SET);
-	free(temp);
-	temp = load_inode_by_id(parent_nid);
-
 	//write to parent dir
-	di->inode = temp->nodeid;
+	di->inode = new->nodeid;
 	memcpy(di->item_name, name, MAX_ITEM_NAME_LENGTH - 1);
-	
-
+	append_dir_item(di, parent);
 
 	//write to new dir
 	bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
 	memcpy(di->item_name, "..", 1);
-	fwrite(di, sizeof(directory_item), 1, fs_file);
+	append_dir_item(di, new);
+	//fwrite(di, sizeof(directory_item), 1, fs_file);
 
 	di->inode = parent_nid;
 	memcpy(di->item_name, "..", 2);
-	fwrite(di, sizeof(directory_item), 1, fs_file);
+	append_dir_item(di, new);
+	//fwrite(di, sizeof(directory_item), 1, fs_file);
 
 	return 0;
 }
 
+/****************/
+/*		*/
+/*    ls	*/
+/*		*/
+/****************/
 
+void print_ls_record(inode *nd, char *name) {
+	switch(nd->isDirectory) {
+		case 0: printf("f\t"); break;
+		case 1: printf("d\t"); break;
+		case 2: printf("l\t"); break;
+	}
+
+	printf("%d\t%d\t%s\n", nd->file_size, nd->nodeid, name);
+}
 
 int list_dir_contents(int32_t node_id) {
 	uint64_t address = sblock->inode_start_address + (node_id - 1) * sizeof(inode);
@@ -269,7 +327,7 @@ int list_dir_contents(int32_t node_id) {
 	inode *tmp = NULL;
 	link *head = NULL;
 
-	printf("STARTING FROM: %d\n", node_id);
+	//printf("STARTING FROM: %d\n", node_id);
 
 	inode *nd = malloc(sizeof(inode));
 	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 3);
@@ -297,54 +355,6 @@ int list_dir_contents(int32_t node_id) {
 
 		item_counter++;
 	}
-
-	return 0;
-}
-
-int search_dir(char *name, int32_t *from_nid) {
-	uint64_t address = 0;
-	int item_counter = 0;
-
-	inode *nd = malloc(sizeof(inode));
-	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 3);
-
-	directory_item *di = malloc(sizeof(directory_item));
-	return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 3);
-
-
-	address = sblock->inode_start_address + (*from_nid - 1) * sizeof(inode);
-
-	fseek(fs_file, address, SEEK_SET);
-	fread(nd, sizeof(inode), 1, fs_file);
-
-	if(nd->isDirectory != 1) {
-		free(nd);
-		free(di);
-		return 2;
-	}
-
-	fseek(fs_file, sblock->data_start_address + nd->direct1 * sblock->cluster_size, SEEK_SET);
-	fread(di, sizeof(directory_item), 1, fs_file);
-
-	while(di->inode != 0 && item_counter < MAX_DIR_ITEMS_IN_BLOCK) {
-		if(!strcmp(di->item_name, name)) {
-			*from_nid = di->inode;
-			break;
-		} else {
-			fread(di, sizeof(directory_item), 1, fs_file);
-		}
-	}
-
-	//no dir item with name found
-	if(!di->inode) {
-		free(nd);
-		free(di);
-		 
-		return 1;
-	}
-	
-	free(nd);
-	free(di);
 
 	return 0;
 }

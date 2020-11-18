@@ -73,5 +73,6 @@ int32_t allocate_free_block();
 //int make_directory(char *name, int32_t parent_nid);
 //int list_dir_contents(int32_t node_id );
 int search_dir(char *name, int32_t *from_nid);
+int append_dir_item(directory_item *di, inode *node);
 
 #endif
