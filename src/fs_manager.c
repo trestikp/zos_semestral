@@ -1,5 +1,7 @@
 #include "fs_manager.h"
+#include "commands.h"
 #include "file_system.h"
+#include "general_functions.h"
 
 
 char *fs_filename = NULL;
@@ -20,6 +22,10 @@ int load_filesystem() {
 	return_error_on_condition(!position,
 				  MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
+	root = calloc(sizeof(inode), 1);
+	return_error_on_condition(!root, MEMORY_ALLOCATION_ERROR_MESSAGE,
+				  OUT_OF_MEMORY_ERROR);
+
 
 	fseek(fs_file, 0, SEEK_SET);
 
@@ -35,7 +41,8 @@ int load_filesystem() {
 	}
 
 	// hack it ... - loading to const
-	*(inode**) &root = position;
+	//*(inode**) &root = position;
+	memcpy(*(inode**) &root, position, 1);
 
 	fs_loaded = true;
 
@@ -61,8 +68,7 @@ int format(char *size) {
 
 	// if unit format is more then 2 characters
 	if(units[2]) {
-		print_error("Unrecognized unit format.\
- Example unit format: MB, GB");
+		print_error("Unrecognized unit format. Example unit format: MB, GB");
  		return 7; // TODO return error value
 	} else { 
 		switch(units[0]) {
@@ -110,6 +116,7 @@ int format(char *size) {
 	return 0;
 }
 
+/*
 int extract_name_from_path(char *path, char **name) {
         int len = strlen(path), off = len;
         
@@ -128,6 +135,36 @@ int extract_name_from_path(char *path, char **name) {
         
         return 0;
 }	
+*/
+
+static inline char *pointer_offset(char *pointer, int offset) {
+     return pointer + (offset * sizeof(char));
+}
+
+int extract(char *ppath, char **pname) {
+     int len = strlen(ppath), off = len;
+
+     if(*pointer_offset(ppath, (len - 1)) == '/') {
+             *pointer_offset(ppath, (len - 1)) = 0x00;
+             len--;
+     }
+
+     while(*pointer_offset(ppath, (off - 1)) != '/' && off > 0) {
+             off--;
+     }
+
+     int diff = len - off;
+
+     *pname = calloc(sizeof(char), diff + 1);
+
+     memcpy(*pname, pointer_offset(ppath, off), diff);
+     *pointer_offset(*pname, diff + 1) = 0x00;
+
+     bzero(pointer_offset(ppath, off), diff);
+
+     return 0;
+}
+
 
 int mkdir(char *path) {
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
@@ -137,20 +174,33 @@ int mkdir(char *path) {
 
 	char *name_new = NULL;
 
-	printf("full path: %s\n", dir_name);
-	extract_name_from_path(dir_name, &name_new);
-	printf("searching for %s in %s\n", name_new, dir_name);
+	//printf("full path: %s\n", dir_name);
+	//extract_name_from_path(dir_name, &name_new);
+	extract(dir_name, &name_new);
+	//printf("searching for %s in %s\n", name_new, dir_name);
 
-	if(dir_name == NULL) printf("DIR NAME IS NUILL");
-	printf("DIR LEN: %ld\n", strlen(dir_name));
+	//if(dir_name == NULL) printf("DIR NAME IS NUILL");
+	//printf("DIR LEN: %ld\n", strlen(dir_name));
 	
 	int parent_id = traverse_path(dir_name);
 	if(!parent_id) return 1;
 	
-	printf("making dir at: %d\n", parent_id);
-	free(dir_name);
+	//printf("making dir at: %d\n", parent_id);
+	if(does_item_exist_in_dir(name_new, parent_id)) return 1;
 	
-	//make_directory(dir_name, parent_it);
+	make_directory(name_new, parent_id);
+
+	free(dir_name);
+
+	return 0;
+}
+
+int cd(char *path) {
+	int target = traverse_path(path);
+	
+	printf("cd target: %d\n", target);
+
+	change_dir(target);
 
 	return 0;
 }
@@ -165,5 +215,30 @@ int ls(char *path) {
 
 	list_dir_contents(end_nid);
 	
+	return 0;
+}
+
+int pwd() {
+	print_working_dir();
+
+	return 0;
+}
+
+
+int incp(char *source, char *target) {
+	FILE *f = fopen(source, "rb");
+	uint64_t size;
+
+	if(!f) {
+		printf("FILE NOT FOUND (missing source)");
+		return 1;
+	}
+
+	fseek(f, 0L, SEEK_END);
+	size = ftell(f);
+	fseek(f, 0L, SEEK_SET);
+
+
+
 	return 0;
 }

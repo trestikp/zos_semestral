@@ -32,13 +32,11 @@ uint8_t run(char *file_name) {
 		if(freopen(NULL, "rb+", fs_file)) {
 			load_filesystem();
 		} else {
-			printf("Failed to reopen file before loading filesytem.\
- Aborting program...\n");
+			printf("Failed to reopen file before loading filesytem. Aborting program...\n");
  			return 1;
 		}
 	} else {
-		printf("INFO: File does not exist. Run \"format\" to\
- initialize new filesystem in %s\n", file_name);
+		printf("INFO: File does not exist. Run \"format\" to initialize new filesystem in %s\n", file_name);
 	}
 		
 	fs_filename = file_name;
@@ -50,8 +48,7 @@ uint8_t run(char *file_name) {
 
 int main(int argc, char *argv[]) {
 	if(argc < 2 || argc > 2) {
-		printf("Expecting file_name argument.\
- Please rerun the program this way: runfs file_name\n");
+		printf("Expecting file_name argument. Please rerun the program this way: runfs file_name\n");
  		return 1;
 	}
 

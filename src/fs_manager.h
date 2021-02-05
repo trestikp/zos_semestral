@@ -11,8 +11,11 @@
 
 int load_filesystem();
 int format(char *size);
-int mkdir(char *dir_name);
+int mkdir(char *path);
+int cd(char *path);
 int ls(char *path);
+int pwd();
+int incp(char *source, char *target);
 
 
 #endif

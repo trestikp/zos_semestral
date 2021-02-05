@@ -18,8 +18,11 @@ fs_manager:
 commands:
 	${CC} ${PARAMS} -c src/commands.c
 
-run: console file_sytem fs_manager commands
-	${CC} ${PARAMS} -o runfs src/main.c console.o file_system.o fs_manager.o commands.o
+general_functions:
+	${CC} ${PARAMS} -c src/general_functions.c
+
+run: console file_sytem fs_manager commands general_functions
+	${CC} ${PARAMS} -o runfs src/main.c console.o file_system.o fs_manager.o commands.o general_functions.o
 
 remove_o:
 	rm -f *.o

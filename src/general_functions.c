@@ -20,6 +20,7 @@ int add_fifo(link **head, void *data) {
 
 	if(!*head) {
 		*head = new;
+		ptr = *head;
 	}
 
 	while(ptr->next) ptr = ptr->next;

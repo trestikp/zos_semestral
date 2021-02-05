@@ -66,13 +66,17 @@ extern FILE *fs_file;
 
 
 inode *load_inode_by_id(int32_t node_id);
+uint64_t get_block_address_from_position(int32_t position);
 int32_t allocate_free_inode();
 int32_t allocate_free_block();
 
 //int create_filesystem(uint64_t max_size);
 //int make_directory(char *name, int32_t parent_nid);
 //int list_dir_contents(int32_t node_id );
-int search_dir(char *name, int32_t *from_nid);
+//int search_dir(char *name, int32_t *from_nid);
+int search_dir(char *name, int32_t from_nid);
+directory_item *find_dir_item_by_id(inode *nd, int32_t node_id);
 int append_dir_item(directory_item *di, inode *node);
+int does_item_exist_in_dir(char *name, int32_t dir_id);
 
 #endif
