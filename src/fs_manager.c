@@ -116,26 +116,6 @@ int format(char *size) {
 	return 0;
 }
 
-/*
-int extract_name_from_path(char *path, char **name) {
-        int len = strlen(path), off = len;
-        
-        while(path[off - 1] != '/' && off > 0) { 
-                off--;
-        } 
-
-        int diff = len - off;
-
-        *name = calloc(sizeof(char), diff + 1);
-        
-        memcpy(*name, path + off, diff);
-        name[diff + 1] = 0x00;
-        
-        bzero(&path[off], diff);
-        
-        return 0;
-}	
-*/
 
 static inline char *pointer_offset(char *pointer, int offset) {
      return pointer + (offset * sizeof(char));
@@ -169,15 +149,12 @@ int extract(char *ppath, char **pname) {
 int mkdir(char *path) {
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 
-	char *dir_name = calloc(sizeof(char), strlen(path) + 1);
+	char *dir_name = calloc(strlen(path) + 1, sizeof(char));
 	memcpy(dir_name, path, strlen(path));
 
 	char *name_new = NULL;
 
-	//printf("full path: %s\n", dir_name);
-	//extract_name_from_path(dir_name, &name_new);
 	extract(dir_name, &name_new);
-	//printf("searching for %s in %s\n", name_new, dir_name);
 
 	//if(dir_name == NULL) printf("DIR NAME IS NUILL");
 	//printf("DIR LEN: %ld\n", strlen(dir_name));
@@ -186,7 +163,8 @@ int mkdir(char *path) {
 	if(!parent_id) return 1;
 	
 	//printf("making dir at: %d\n", parent_id);
-	if(does_item_exist_in_dir(name_new, parent_id)) return 1;
+	//if(does_item_exist_in_dir(name_new, parent_id)) return 1;
+	if(search_dir(name_new, &parent_id) != 1) return 1;
 	
 	make_directory(name_new, parent_id);
 
@@ -195,8 +173,20 @@ int mkdir(char *path) {
 	return 0;
 }
 
+int rmdir(char* path) {
+	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
+	
+	int32_t target = traverse_path(path);
+
+	if(!target) return 1;
+
+	remove_directory(target);
+
+	return 0;
+}
+
 int cd(char *path) {
-	int target = traverse_path(path);
+	int32_t target = traverse_path(path);
 	
 	printf("cd target: %d\n", target);
 
@@ -226,19 +216,45 @@ int pwd() {
 
 
 int incp(char *source, char *target) {
-	FILE *f = fopen(source, "rb");
-	uint64_t size;
+	char *source_name = NULL, *target_name = NULL;
+	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
+	char *target_cpy = calloc(strlen(target) + 1, sizeof(char));
 
-	if(!f) {
-		printf("FILE NOT FOUND (missing source)");
-		return 1;
-	}
+	printf("INCP source: %s\n", source);
+	printf("INCP target: %s\n", target);
 
-	fseek(f, 0L, SEEK_END);
-	size = ftell(f);
-	fseek(f, 0L, SEEK_SET);
+	strcpy(source_cpy, source);
+	strcpy(target_cpy, target);
+	extract(source_cpy, &source_name);
+	extract(target_cpy, &target_name);
+
+	printf("INCP source_name: %s\n", (source_name ? source_name : "NULL"));
+	printf("INCP target_name: %s\n", (target_name ? target_name : "NULL"));
 
 
+	//int32_t tnode = traverse_path(target);
+	int32_t tnode = traverse_path(target_cpy);
+	if(!tnode) return 1;
+
+	in_copy(source, tnode, source_name, target_name);
+
+	free(source_cpy);
+	free(target_cpy);
+
+	return 0;
+}
+
+int cat(char *path) {
+	char *name = NULL;
+	char *path_cpy = calloc(strlen(path) + 1, sizeof(char));
+
+	strcpy(path_cpy, path);
+	extract(path_cpy, &name);
+
+	int32_t tnode = traverse_path(path_cpy);
+	if(!tnode) return 1;
+
+	cat_file(tnode, name);
 
 	return 0;
 }

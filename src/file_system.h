@@ -23,6 +23,9 @@
 #define DEFAULT_DESCRIPTION "This is a semestral work for KIV/ZOS.\
  Objective of this project is to create pseudo inode filesystem."
 
+//1 for indirect1, 1 for indirect2, rest to fill indirect2
+#define MAX_NUMBER_OF_ADDITIONAL (2 + (sblock->cluster_size / sizeof(int32_t)))
+
 typedef struct super_block {
     char signature[9];              //login autora FS
     char volume_descriptor[251];    //popis vygenerovaného FS
@@ -69,14 +72,24 @@ inode *load_inode_by_id(int32_t node_id);
 uint64_t get_block_address_from_position(int32_t position);
 int32_t allocate_free_inode();
 int32_t allocate_free_block();
+void save_inode(inode *nd);
 
 //int create_filesystem(uint64_t max_size);
 //int make_directory(char *name, int32_t parent_nid);
 //int list_dir_contents(int32_t node_id );
-//int search_dir(char *name, int32_t *from_nid);
-int search_dir(char *name, int32_t from_nid);
+int search_dir(char *name, int32_t *from_nid);
+//int search_dir(char *name, int32_t from_nid);
 directory_item *find_dir_item_by_id(inode *nd, int32_t node_id);
 int append_dir_item(directory_item *di, inode *node);
-int does_item_exist_in_dir(char *name, int32_t dir_id);
+int allocate_blocks_for_file(inode *nd, int block_count);
+int free_allocated_blocks(inode *nd);
+int is_dir_empty(inode *nd);
+int remove_dir_node(inode *nd);
+int remove_dir_node_2(inode *nd);
+void zero_data_block(int32_t block);
+void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int block_num);
+//int read_data_to_buffer(char *buffer[BLOCK_SIZE], inode *nd, int32_t block_num);
+int read_data_to_buffer(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num);
+
 
 #endif

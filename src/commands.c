@@ -5,6 +5,7 @@
 /**************************************/
 
 #include "commands.h"
+#include "file_system.h"
 
 /**************************************/
 /* 				      */
@@ -23,6 +24,12 @@ extern inode *position;
 /*				      */
 /**************************************/
 
+
+/**
+	Goes through given @path
+	return node_id - of last element in path
+		0 - on error
+*/
 int32_t traverse_path(char *path) {
         char *token = NULL, *path_cpy = NULL;
         int ret = 0, on_way = 0;
@@ -51,24 +58,41 @@ int32_t traverse_path(char *path) {
         strcpy(path_cpy, path);
 
         token = strtok(path_cpy, "/");
-	//TODO: Change error outputs
         while(token) {
-                //switch(ret = search_dir(token, &node_id)){
-                switch(ret = search_dir(token, node_id)){
-                        case 0: printf("zero\n"); break;
-                        case 1: printf("doesn't exist\n"); break;
-                        case 2: printf("isn't dir\n"); break;
-                        default: ret = 1; printf("unknown error\n");
+		if(on_way) {
+			on_way = 2;
+			break;
+		}
+
+		ret = search_dir(token, &node_id);
+
+		if(ret == 1) {
+			printf("FILE NOT FOUND\n");
+			break;
+		} else if(ret == 2) {
+			on_way = 1;
+		} else if(ret) {
+			printf("UKNOWN SEARCH DIR ERROR\n");
+			free(path_cpy);
+			return 0;
+		}
+		/*
+                switch(ret = search_dir(token, &node_id)){
+                        case 0: //printf("zero\n"); //break; // 0 = all good
+                        case 1: printf("FILE NOT FOUND\n"); break;
+                        case 2: printf("CANNOT TRAVERSE FILE\n"); break;
+                        default: ret = 1; printf("UNKNOWN ERROR\n");
                 }
 
                 if(ret) {
                         on_way = 1;
                 }
+		*/
 
                 token = strtok(NULL, "/");
         }
 
-        if(on_way) {
+        if(on_way == 2) {
 		free(path_cpy);
                 return 0;
         }
@@ -168,38 +192,38 @@ int create_filesystem(uint64_t max_size) {
 	//first inode bmp byte (root)
 	fputc(0x80, fs_file);
 	//fwrite? 
-	for(i = 0; i < (sblock->bitmap_start_address -
-	sblock->bitmapi_start_address - 1); i++) {
+	for(i = 0; i < (sblock->bitmap_start_address - sblock->bitmapi_start_address - 1); i++) {
 		fputc(0x00, fs_file);
 	}
 
 	printf("BBMP WRITE: %ld\n", ftell(fs_file));
 	//first block bmp byte(root)
 	fputc(0x80, fs_file);
-	for(i = 0; i < (sblock->inode_start_address -
-	sblock->bitmap_start_address - 1); i++) {
+	for(i = 0; i < (sblock->inode_start_address - sblock->bitmap_start_address - 1); i++) {
 		fputc(0x00, fs_file);
 	}
 
 	//first inode
-	node = malloc(sizeof(inode));
+	node = calloc(1, sizeof(inode));
 	return_error_on_condition(!node, MEMORY_ALLOCATION_ERROR_MESSAGE, 2);
 
 	node->nodeid = 1;
 	node->isDirectory = 1;
 	node->references = 1;
-	node->direct1 = 0;
 	node->file_size = BLOCK_SIZE;
 
 	printf("INODE WRITE: %ld\n", ftell(fs_file));
 	fwrite(node, sizeof(inode), 1, fs_file);
 
+	/*
 	node->references = 0;
 	node->isDirectory = 0;
 	node->file_size = 0;
+	*/
+	memset(node, 0x00, sizeof(inode));
 
-	for(i = 1; i < ((sblock->bitmap_start_address -
-	sblock->bitmapi_start_address) * 8); i++) {
+	//why do i do *8?? i dont remember anymore TODO
+	for(i = 1; i < ((sblock->bitmap_start_address -	sblock->bitmapi_start_address) * 8); i++) {
 		node->nodeid = i + 1;
 		fwrite(node, sizeof(inode), 1, fs_file);
 	}
@@ -207,7 +231,7 @@ int create_filesystem(uint64_t max_size) {
 	free(node);
 
 	//first block
-	ditem = malloc(sizeof(directory_item));
+	ditem = calloc(1, sizeof(directory_item));
 	return_error_on_condition(!ditem, MEMORY_ALLOCATION_ERROR_MESSAGE, 2);
 
 	ditem->inode = 1;
@@ -225,8 +249,8 @@ int create_filesystem(uint64_t max_size) {
 	memcpy(ditem->item_name, "..", 2);
 	fwrite(ditem, sizeof(directory_item), 1, fs_file);
 
-	for(i = 0; i < (sblock->cluster_size *
-	sblock->cluster_count - sizeof(directory_item) * 3); i++) {
+	//im confused, aren't there only 2 dir_items?? TODO (*2 instead *3)
+	for(i = 0; i < (sblock->cluster_size * sblock->cluster_count - sizeof(directory_item) * 3); i++) {
 		fputc(0x00, fs_file);
 	}
 	printf("BLOCK END: %ld\n", ftell(fs_file));
@@ -243,7 +267,6 @@ int create_filesystem(uint64_t max_size) {
 /****************/
 
 int make_directory(char *name, int32_t parent_nid) {
-	//position is equivalent to nodeid
 	int32_t pos = 0;
 	inode *new = NULL, *parent = NULL;
 
@@ -257,8 +280,9 @@ int make_directory(char *name, int32_t parent_nid) {
 	return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, OUT_OF_MEMORY_ERROR);
 
 	pos = allocate_free_inode();
-	new = load_inode_by_id(pos);
+	new = load_inode_by_id(pos + 1); //id is starting from 1, pos starts from 0 -> pos + 1 = id
 	return_error_on_condition(!new, MEMORY_ALLOCATION_ERROR_MESSAGE, OUT_OF_MEMORY_ERROR);
+
 	parent = load_inode_by_id(parent_nid);
 	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, OUT_OF_MEMORY_ERROR);
 
@@ -266,14 +290,14 @@ int make_directory(char *name, int32_t parent_nid) {
 	//TODO: free memory on condition!!
 	return_error_on_condition(!new->direct1, "failed to allocate free block", 2);
 
-	new->nodeid = pos;
+	zero_data_block(new->direct1);
+
+	new->nodeid = pos + 1;
 	new->isDirectory = 1;
 	new->file_size = sblock->cluster_size;
 	new->references = 1;
 
-	//fseek(fs_file, -(sizeof(inode)), SEEK_CUR);
-	fseek(fs_file, (sblock->inode_start_address +
-	      (pos - 1) * sizeof(inode)), SEEK_SET); //TODO: make sure pos - 1
+	fseek(fs_file, (sblock->inode_start_address + pos * sizeof(inode)), SEEK_SET);
 	fwrite(new, sizeof(inode), 1, fs_file);
 	
 	//write to parent dir
@@ -281,18 +305,14 @@ int make_directory(char *name, int32_t parent_nid) {
 	memcpy(di->item_name, name, MAX_ITEM_NAME_LENGTH - 1);
 	append_dir_item(di, parent);
 
-	//fseek(fs_file, get_block_address_from_position(new->direct1), SEEK_SET);
-
 	//write to new dir
 	bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
 	memcpy(di->item_name, "..", 1);
 	append_dir_item(di, new);
-	//fwrite(di, sizeof(directory_item), 1, fs_file);
 
 	di->inode = parent_nid;
 	memcpy(di->item_name, "..", 2);
 	append_dir_item(di, new);
-	//fwrite(di, sizeof(directory_item), 1, fs_file);
 
 	free(new);
 	free(parent);
@@ -380,54 +400,46 @@ int change_dir(int32_t target_id) {
 
 int print_working_dir() {
 	int fake_current = position->nodeid;
-	int child_id = fake_current;
+	int child_id = 0;
 	link *pwd_head = NULL;
 	inode *nd = NULL;
 
-	do {
-		free(nd);
-		//if(search_dir("..", &fake_current)) return 9000;
-		if(search_dir("..", fake_current)) return 9000;
 
-		nd = load_inode_by_id(fake_current);
-		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 9000);
-
-		directory_item *blah = find_dir_item_by_id(nd, child_id);
-		add_lifo(&pwd_head, blah);
-
-		child_id = nd->nodeid;
-	} while(child_id != 1);
-
-	free(nd);
-
-	link *it = pwd_head;
-	while(it->next) {
-		printf("/%s", ((directory_item*) it->data)->item_name);
-		it = it->next;
+	if(position->nodeid == 1) { //duck it, when in root just print "/" and be done with it
+		printf("/\n");
+		return 0;
 	}
-	printf("\n");
 	
-	/*
-	while(root != 1) {
-		if(search_dir("..", &fake_current)) {
-			return 1; //ERROR
+	while(fake_current != 1) {
+		child_id = fake_current;
+
+		if(search_dir("..", &fake_current)) { //this sets fake_current to parent id
+			printf("Error: Failed to fetch parent dir");
+			return 1;
 		}
 
-		root = fake_current;
-		search_dir(".", &root);
+		nd = load_inode_by_id(fake_current);
+		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 2);
 
-		printf("fc: %d\n",fake_current);
+		directory_item *di = find_dir_item_by_id(nd, child_id);
+		return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 2);
+
+		//add_lifo(&pwd_head, di->item_name);
+		add_lifo(&pwd_head, di);
+
+		free(nd);
 	}
-	*/
-	
-	//printf("fake current: %d\n", fake_current);
 
-	/*
-	while(pwd_head->next) {
-		printf("%s/", (char*) pwd_head->data);
+	while(pwd_head) {
+		printf("/%s", ((directory_item*) pwd_head->data)->item_name);
+
+		free(pwd_head->data);
+
+		link *temp = pwd_head;
+		pwd_head = pwd_head->next;
+		free(temp);
 	}
 	printf("\n");
-	*/
 	
 	return 0;
 }
@@ -438,8 +450,186 @@ int print_working_dir() {
 /*		*/
 /****************/
 
-int in_copy() {
 
+inode *prepare_new_file_node() {
+	int32_t new_nd = 0;
+	inode *nd = NULL;
+
+	if((new_nd = allocate_free_inode())) {
+		nd = load_inode_by_id(new_nd);
+		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
+
+		if(nd->nodeid != (new_nd + 1)) { // IDs are inode numbers (index + 1) and are numbered since
+			printf("Blah Error");    // their initialization so theorethically this should match
+		}				// and could serve as a sort of check, but can be omitted as well
+		
+		nd->nodeid = new_nd + 1;
+		nd->references = 1;
+		nd->isDirectory = 0;
+	} else {
+		printf("OUT OF INODES\n");
+	}
+
+	return nd;
+}
+
+int copy_file_to_node(FILE *f, inode *nd) {
+	uint64_t size = 0;
+	int i = 0, read = 0;
+	char buffer[sblock->cluster_size + 1];
+
+	buffer[sblock->cluster_size] = 0x00;
+
+	//get file size
+	fseek(f, 0L, SEEK_END);
+	size = ftell(f);
+	printf("File size: %ld\n", size);
+	fseek(f, 0L, SEEK_SET);
+
+	int block_count = size / sblock->cluster_size + 1;
+	printf("Will need %d blocks\n",block_count);
+
+	if(allocate_blocks_for_file(nd, block_count)) { //failed to allocate blocks
+		return 1;
+	}
+
+	//nd->file_size = size;
+	nd->file_size = 0;
+
+	for(i = 1; i <= block_count; i++) {
+		//wanted to do this only when read is < block size, but i'm useless and dunno
+		bzero(buffer, sblock->cluster_size); 
+
+		read = fread(buffer, sizeof(char), sblock->cluster_size, f);
+		
+		/*
+		if(read != sblock->cluster_size) {
+			bzero(buffer, sblock->cluster_size);
+		}
+		*/
+
+		nd->file_size += read;
+
+		write_data_to_block(buffer, nd, i);
+	}
+
+	return 0;
+}
+
+int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) {
+	int create_new = 0, exists = 0;
+	inode *nd = NULL, *parent = NULL;
+	FILE *f = fopen(source, "rb");
+
+	//test fopen
+	if(!f) {
+		printf("FILE NOT FOUND (missing source)");
+		return 1;
+	}
+
+	//check if target is file, dir or doesn't exit. Creates file with @source_name
+	//if target is directory (in target dir) or doesn't exist (in current dir)
+	if(!search_dir(target_name, &t_node)) {
+		exists = 1;
+	}
+
+	nd = load_inode_by_id(t_node);
+	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	if(exists) {
+		if(nd->isDirectory == 0) {
+			free_allocated_blocks(nd);
+			copy_file_to_node(f, nd);
+		} else if(nd->isDirectory == 1) {
+			parent = nd;
+			nd = prepare_new_file_node();
+			copy_file_to_node(f, nd);
+			save_inode(nd);
+
+			directory_item *di = calloc(1, sizeof(directory_item));
+			di->inode = nd->nodeid;
+			strcpy(di->item_name, source_name);
+
+			append_dir_item(di, parent);
+		} else {
+			printf("UKNOWN NODE TYPE");
+			return 1;
+		}
+	} else {
+		parent = nd;
+		nd = prepare_new_file_node();
+		copy_file_to_node(f, nd);
+		save_inode(nd);
+
+		directory_item *di = calloc(1, sizeof(directory_item));
+		di->inode = nd->nodeid;
+		strcpy(di->item_name, source_name);
+
+		append_dir_item(di, parent);
+	}
+
+	return 0;
+}
+
+
+/****************/
+/*		*/
+/*    rmdir	*/
+/*		*/
+/****************/
+
+int remove_directory(int32_t node_id) {
+	int rv = 0;
+
+	inode *nd = load_inode_by_id(node_id);
+	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	if(nd->isDirectory != 1) {
+		printf("ISN'T DIR\n");
+	}
+
+	if((rv = is_dir_empty(nd))) { //is_dir_empty return 0 on empty, number on error
+		switch(rv) {
+			case 1: printf("NOT EMPTY\n"); return 2;
+			case 2: return 1;
+		}
+	}
+	
+	//remove_dir_node(nd);
+	remove_dir_node_2(nd);
+
+	free(nd);
+
+	return 0;
+}
+
+
+/****************/
+/*		*/
+/*    cat	*/
+/*		*/
+/****************/
+
+int cat_file(int32_t where, char *name) {
+	int rv = 0, it = 1;
+	char buffer[sblock->cluster_size + 1];
+	
+	buffer[sblock->cluster_size] = 0x00;
+
+	if(!search_dir(name, &where)) {
+		inode *nd = load_inode_by_id(where);
+		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		while(!rv) {
+
+			rv = read_data_to_buffer(buffer, nd, it);
+			printf("%s", buffer);
+			it++;
+		}
+	} else {
+		printf("Failed to find %s in dir\n", name);
+		return 1;
+	}
 	
 	return 0;
 }

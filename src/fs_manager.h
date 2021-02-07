@@ -16,6 +16,8 @@ int cd(char *path);
 int ls(char *path);
 int pwd();
 int incp(char *source, char *target);
+int rmdir(char *path);
+int cat(char *path);
 
 
 #endif
