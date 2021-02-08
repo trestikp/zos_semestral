@@ -220,19 +220,11 @@ int incp(char *source, char *target) {
 	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
 	char *target_cpy = calloc(strlen(target) + 1, sizeof(char));
 
-	printf("INCP source: %s\n", source);
-	printf("INCP target: %s\n", target);
-
 	strcpy(source_cpy, source);
 	strcpy(target_cpy, target);
 	extract(source_cpy, &source_name);
 	extract(target_cpy, &target_name);
 
-	printf("INCP source_name: %s\n", (source_name ? source_name : "NULL"));
-	printf("INCP target_name: %s\n", (target_name ? target_name : "NULL"));
-
-
-	//int32_t tnode = traverse_path(target);
 	int32_t tnode = traverse_path(target_cpy);
 	if(!tnode) return 1;
 
@@ -256,5 +248,104 @@ int cat(char *path) {
 
 	cat_file(tnode, name);
 
+	free(path_cpy);
+
+	return 0;
+}
+
+int rm(char *path) {
+	char *name = NULL;
+	char *path_cpy = calloc(strlen(path) + 1, sizeof(char));
+
+	strcpy(path_cpy, path);
+	extract(path_cpy, &name);
+
+	int32_t tnode = traverse_path(path_cpy);
+	if(!tnode) return 1;
+
+	remove_file(tnode, name);
+
+	return 0;
+}
+
+
+int mv(char *source, char *target) {
+	char *source_name = NULL, *target_name = NULL;
+	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
+	char *target_cpy = calloc(strlen(target) + 1, sizeof(char));
+
+	strcpy(source_cpy, source);
+	strcpy(target_cpy, target);
+	extract(source_cpy, &source_name);
+	extract(target_cpy, &target_name);
+
+	//int32_t tnode = traverse_path(target);
+	int32_t snode = traverse_path(source_cpy);
+	if(!snode) return 1;
+	int32_t tnode = traverse_path(target_cpy);
+	if(!tnode) return 1;
+
+	move(snode, tnode, source_name, target_name);
+
+	free(source_cpy);
+	free(target_cpy);
+
+	return 0;
+}
+
+
+int cp(char *source, char *target) {
+	char *source_name = NULL, *target_name = NULL;
+	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
+	char *target_cpy = calloc(strlen(target) + 1, sizeof(char));
+
+	strcpy(source_cpy, source);
+	strcpy(target_cpy, target);
+	extract(source_cpy, &source_name);
+	extract(target_cpy, &target_name);
+
+	//int32_t tnode = traverse_path(target);
+	int32_t snode = traverse_path(source_cpy);
+	if(!snode) return 1;
+	int32_t tnode = traverse_path(target_cpy);
+	if(!tnode) return 1;
+
+	copy(snode, tnode, source_name, target_name);
+
+	free(source_cpy);
+	free(target_cpy);
+	
+	return 0;
+}
+
+
+int info(char *path) {
+	char *name = NULL;
+	char *path_cpy = calloc(strlen(path) + 1, sizeof(char));
+
+	strcpy(path_cpy, path);
+	extract(path_cpy, &name);
+
+	int32_t tnode = traverse_path(path_cpy);
+	if(!tnode) return 1;
+
+	node_info(tnode, name);
+
+	return 0;
+}
+
+
+int outcp(char *source, char *target) {
+	char *name = NULL;
+	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
+
+	strcpy(source_cpy, source);
+	extract(source_cpy, &name);
+
+	int32_t tnode = traverse_path(source_cpy);
+	if(!tnode) return 1;
+
+	out_copy(tnode, name, target);
+	
 	return 0;
 }

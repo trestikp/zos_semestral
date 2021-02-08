@@ -19,6 +19,27 @@ uint8_t check_parameters(uint8_t expected_par_count, char* par1, char* par2) {
 	return 0;
 }
 
+uint8_t process_command(char *command_parts[3]);
+void load(char *file) {
+	FILE *f = fopen(file, "r");
+
+	if(!f) {
+		printf("ERROR: Failed to open command file\n");
+		return;
+	}
+
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t read;
+
+	while((read = getline(&line, &len, f)) != -1) {
+		line[len - 1] = 0; //in doc it says it doens't include \0 but does include \n
+		printf("command: %s\n", line);
+	}
+	
+	fclose(f);
+}
+
 /*
 	Calls appropriate function for entered command if recognized.
 
@@ -34,13 +55,18 @@ uint8_t process_command(char *command_parts[3]) {
 	if(!strcmp(command_parts[0], "exit")) return 1;
 
 	if(!strcmp(command_parts[0], "cp")) {
-		//validate param 1
-		//validate param 2
-		//do cp
+		if(!command_parts[1] || !command_parts[2]) return 5;
+		cp(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "mv")) {
+		if(!command_parts[1] || !command_parts[2]) return 5;
+		mv(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "rm")) {
+		if(!command_parts[1]) return 3;
+		if(command_parts[2] != NULL) return 4;
+		ret = rm(command_parts[1]); 
+		printf("ret; %d\n", ret);
 	}
 	else if(!strcmp(command_parts[0], "mkdir")) {
 		if(!command_parts[1]) return 3;
@@ -75,14 +101,22 @@ uint8_t process_command(char *command_parts[3]) {
 		pwd();
 	}
 	else if(!strcmp(command_parts[0], "info")) {
+		if(!command_parts[1]) return 3;
+		if(command_parts[2] != NULL) return 4;
+		info(command_parts[1]);
 	}
 	else if(!strcmp(command_parts[0], "incp")) {
 		if(!command_parts[1] || !command_parts[2]) return 5;
 		incp(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "outcp")) {
+		if(!command_parts[1] || !command_parts[2]) return 5;
+		outcp(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "load")) {
+		if(!command_parts[1]) return 3;
+		if(command_parts[2] != NULL) return 4;
+		load(command_parts[1]);
 	}
 	else if(!strcmp(command_parts[0], "format")) {
 		if(!command_parts[1]) return 3;

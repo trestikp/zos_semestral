@@ -18,6 +18,11 @@ int pwd();
 int incp(char *source, char *target);
 int rmdir(char *path);
 int cat(char *path);
+int rm(char *path);
+int mv(char *source, char *target);
+int cp(char *source, char *target);
+int info(char *path);
+int outcp(char *source, char *target);
 
 
 #endif

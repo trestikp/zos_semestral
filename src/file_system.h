@@ -15,7 +15,8 @@
 
 
 #define ID_ITEM_FREE 0
-#define BLOCK_SIZE 1024
+//#define BLOCK_SIZE 1024
+#define BLOCK_SIZE 4096
 #define MAX_ITEM_NAME_LENGTH 12
 #define MAX_DIR_ITEMS_IN_BLOCK (int) (BLOCK_SIZE / sizeof(directory_item))
 
@@ -73,6 +74,10 @@ uint64_t get_block_address_from_position(int32_t position);
 int32_t allocate_free_inode();
 int32_t allocate_free_block();
 void save_inode(inode *nd);
+int free_inode_with_id(int32_t node_id);
+directory_item *extract_dir_item_from_dir(int32_t where, int32_t item_id);
+directory_item *extract_dir_item_from_dir_2(inode *nd);
+uint64_t get_dir_item_address(inode *parent, int32_t id);
 
 //int create_filesystem(uint64_t max_size);
 //int make_directory(char *name, int32_t parent_nid);
@@ -86,6 +91,7 @@ int free_allocated_blocks(inode *nd);
 int is_dir_empty(inode *nd);
 int remove_dir_node(inode *nd);
 int remove_dir_node_2(inode *nd);
+int remove_dir_item(int32_t parent_nid, int32_t di_nid);
 void zero_data_block(int32_t block);
 void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int block_num);
 //int read_data_to_buffer(char *buffer[BLOCK_SIZE], inode *nd, int32_t block_num);

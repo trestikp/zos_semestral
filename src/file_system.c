@@ -34,7 +34,7 @@ void print_inode_bitmap() {
 	fseek(fs_file, sblock->bitmapi_start_address, SEEK_SET);
 
 	printf("Inode bitmap: ");
-	while(address <= ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8)) {
+	while(address < ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8)) {
 		byte = fgetc(fs_file);
 
 		for(i = 7; i >=0; i--) {
@@ -43,6 +43,8 @@ void print_inode_bitmap() {
 			} else {
 				printf("0");
 			}
+
+			address++;
 		}
 
 		printf(" ");
@@ -82,6 +84,10 @@ inode *load_inode_by_id(int32_t node_id) {
 	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
 
 	fseek(fs_file, get_inode_address_from_id(node_id), SEEK_SET);
+	//printf("\n\n --- bitmap --- \n");
+	//print_inode_bitmap();
+	//printf("--- bitmap --- \n\n");
+	//printf("INFO: Loading inode from %ld\n", ftell(fs_file));
 	fread(nd, sizeof(inode), 1, fs_file);
 
 	if(nd->nodeid != node_id) {
@@ -111,7 +117,7 @@ int32_t allocate_free_inode() {
 
 
 	fseek(fs_file, sblock->bitmapi_start_address, SEEK_SET);
-	while(address <= ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8)) {
+	while(address < ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8)) {
 		byte = fgetc(fs_file);
 		for(i = (sizeof(uint8_t) * 8 - 1); i >= 0; i--) {
 			if(!(byte & (1 << i))) {
@@ -733,7 +739,7 @@ int remove_dir_node_2(inode *nd) {
 	printf("Removing dir with nodeid %d\n", nd->nodeid);
 
 	if(search_dir("..", &parent_id)) {
-		printf("Error: Failed to find parent dir");
+		printf("ERROR: Failed to find parent dir\n");
 		return 1;
 	}
 
@@ -768,5 +774,151 @@ int remove_dir_node_2(inode *nd) {
 	free_allocated_blocks(nd);
 	free_inode_with_id(nd->nodeid);
 	
+	return 0;
+}
+
+int remove_dir_item(int32_t parent_nid, int32_t di_nid) {
+	int i = 0, count = 0, passed = 0;
+	directory_item content[MAX_DIR_ITEMS_IN_BLOCK] = {0}, di;
+
+	inode *parent = load_inode_by_id(parent_nid);
+	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	inode *nd = load_inode_by_id(di_nid);
+	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	if(parent->isDirectory != 1) {
+		printf("ERROR: Parent isn't a dir");
+		return 1;
+	}
+
+	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
+	for(i = 0; i < MAX_NUMBER_OF_ADDITIONAL; i++) {
+		fread(&di, sizeof(directory_item), 1, fs_file);
+
+		if(!di.inode) break;
+
+		if(passed) {
+			content[i - 1] = di;
+		} else {
+			if(di.inode == nd->nodeid) {
+				passed = 1;
+			} else {
+				content[i] = di;
+			}
+		}
+
+		count++;
+	}
+
+	printf("Removing dir item from nodeid %d\n COUNT: %d\n", parent->nodeid, count);
+
+	zero_data_block(parent->direct1);
+	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
+	fwrite(content, sizeof(directory_item), count, fs_file);
+
+	free_allocated_blocks(nd);
+	free_inode_with_id(nd->nodeid);
+
+	return 0;
+}
+
+directory_item *extract_dir_item_from_dir(int32_t where, int32_t item_id) { 
+	int i = 0, count = 0, passed = 0;
+	directory_item content[MAX_DIR_ITEMS_IN_BLOCK] = {0}, di;
+	directory_item *res = calloc(1, sizeof(directory_item));
+
+
+	inode *parent = load_inode_by_id(where);
+	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
+
+	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
+	for(i = 0; i < MAX_NUMBER_OF_ADDITIONAL; i++) {
+		fread(&di, sizeof(directory_item), 1, fs_file);
+
+		if(!di.inode) break;
+
+		if(passed) {
+			content[i - 1] = di;
+		} else {
+			if(di.inode == item_id) {
+				passed = 1;
+				memcpy(res, &di, sizeof(directory_item));
+			} else {
+				content[i] = di;
+			}
+		}
+
+		count++;
+	}
+
+
+	zero_data_block(parent->direct1);
+	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
+	fwrite(content, sizeof(directory_item), count, fs_file);
+
+	free(parent);
+
+	return res;
+}
+
+directory_item *extract_dir_item_from_dir_2(inode *nd) { 
+	int32_t parent_id = nd->nodeid;
+	inode *parent = NULL;
+	int i = 0, count = 0, passed = 0;
+	directory_item content[MAX_DIR_ITEMS_IN_BLOCK] = {0}, di;
+	directory_item *res = calloc(1, sizeof(directory_item));
+
+	if(search_dir("..", &parent_id)) {
+		printf("ERROR: Failed to find parent dir");
+		return NULL;
+	}
+
+	parent = load_inode_by_id(parent_id);
+	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
+
+	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
+	for(i = 0; i < MAX_NUMBER_OF_ADDITIONAL; i++) {
+		fread(&di, sizeof(directory_item), 1, fs_file);
+
+		if(!di.inode) break;
+
+		if(passed) {
+			content[i - 1] = di;
+		} else {
+			if(di.inode == nd->nodeid) {
+				passed = 1;
+				memcpy(res, &di, sizeof(directory_item));
+			} else {
+				content[i] = di;
+			}
+		}
+
+		count++;
+	}
+
+	zero_data_block(parent->direct1);
+	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
+	fwrite(content, sizeof(directory_item), count, fs_file);
+
+	free(parent);
+
+	return res;
+}
+
+
+uint64_t get_dir_item_address(inode *parent, int32_t id) {
+	int i = 0;
+	directory_item di;
+
+	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
+	for(i = 0; i < MAX_DIR_ITEMS_IN_BLOCK; i++) {
+		fread(&di, sizeof(directory_item), 1, fs_file);
+		if(di.inode == id) {
+			fseek(fs_file, -sizeof(directory_item), SEEK_CUR);
+			return ftell(fs_file);
+		}
+	}
+
 	return 0;
 }

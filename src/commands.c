@@ -356,7 +356,7 @@ int list_dir_contents(int32_t node_id) {
 	fseek(fs_file, sblock->data_start_address + nd->direct1 * sblock->cluster_size, SEEK_SET);
 	fread(di, sizeof(directory_item), 1, fs_file);
 
-	printf("type\tsize\tinode\tname\n");
+	printf("TYPE\tSIZE\tINODE\tNAME\n");
 
 	while(di->inode != 0 && item_counter < MAX_DIR_ITEMS_IN_BLOCK) {
 		file_pos = ftell(fs_file);
@@ -455,14 +455,11 @@ inode *prepare_new_file_node() {
 	int32_t new_nd = 0;
 	inode *nd = NULL;
 
+	printf("CREATING NEW NODE\n");
 	if((new_nd = allocate_free_inode())) {
-		nd = load_inode_by_id(new_nd);
+		nd = load_inode_by_id(new_nd + 1); //new_nd is position not id!!!
 		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
 
-		if(nd->nodeid != (new_nd + 1)) { // IDs are inode numbers (index + 1) and are numbered since
-			printf("Blah Error");    // their initialization so theorethically this should match
-		}				// and could serve as a sort of check, but can be omitted as well
-		
 		nd->nodeid = new_nd + 1;
 		nd->references = 1;
 		nd->isDirectory = 0;
@@ -517,7 +514,7 @@ int copy_file_to_node(FILE *f, inode *nd) {
 }
 
 int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) {
-	int create_new = 0, exists = 0;
+	int exists = 0;
 	inode *nd = NULL, *parent = NULL;
 	FILE *f = fopen(source, "rb");
 
@@ -558,7 +555,14 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 	} else {
 		parent = nd;
 		nd = prepare_new_file_node();
-		copy_file_to_node(f, nd);
+
+		if(copy_file_to_node(f, nd)) {
+			//theorethically there isn't need to free the inode because it wasn't
+			//saved yet, but just to be sure
+			free_inode_with_id(nd->nodeid);
+			return 1;
+		}
+
 		save_inode(nd);
 
 		directory_item *di = calloc(1, sizeof(directory_item));
@@ -621,15 +625,326 @@ int cat_file(int32_t where, char *name) {
 		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
 		while(!rv) {
-
 			rv = read_data_to_buffer(buffer, nd, it);
+			if(rv) break;
 			printf("%s", buffer);
 			it++;
 		}
 	} else {
-		printf("Failed to find %s in dir\n", name);
+		//printf("Failed to find %s in dir\n", name);
 		return 1;
 	}
+	
+	return 0;
+}
+
+
+/****************/
+/*		*/
+/*    rm	*/
+/*		*/
+/****************/
+
+int remove_file(int32_t where, char *name) {
+	int parent = where;
+
+	if(!search_dir(name, &where)) {
+		//inode *nd = load_inode_by_id(where);
+		//return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		remove_dir_item(parent, where);
+		//remove_dir_node_2(nd);
+		//free_inode_with_id(where);
+	}
+
+	return 0;
+}
+
+
+/****************/
+/*		*/
+/*    mv	*/
+/*		*/
+/****************/
+
+
+int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
+	int32_t tgt_id = tparent, src_id = sparent;
+
+	
+	inode *sprnt = load_inode_by_id(sparent);
+	return_error_on_condition(!sprnt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	inode *tprnt = load_inode_by_id(tparent);
+	return_error_on_condition(!tprnt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	if(search_dir(tname, &tgt_id)) {
+		printf("ERROR: Failed to find target in parent");
+		return 1;
+	}
+
+	if(search_dir(sname, &src_id)) {
+		printf("ERROR: Failed to find target in parent");
+		return 1;
+	}
+
+
+	inode *src = load_inode_by_id(src_id);
+	return_error_on_condition(!src, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	inode *tgt = load_inode_by_id(tgt_id);
+	return_error_on_condition(!tgt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	if(src->isDirectory == 1 && tgt->isDirectory != 1) {
+		printf("CANNOT MOVE DIR TO FILE\n");
+		return 1;
+	}
+
+	if(tgt->isDirectory == 1) {
+		directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
+		return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		append_dir_item(di, tgt);
+
+		free(di);
+	} else if(tgt->isDirectory == 0) {
+		remove_dir_item(tprnt->nodeid, tgt->nodeid);
+		free_inode_with_id(tgt->nodeid);
+
+		directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
+		return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
+		memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
+
+		append_dir_item(di, tprnt);
+
+		free(di);
+	} else {
+		printf("ERROR: Unknown item\n");
+		return 1;
+	}
+
+	free(sprnt);
+	free(tprnt);
+	free(src);
+	free(tgt);
+	
+	return 0;
+}
+
+/****************/
+/*		*/
+/*    cp	*/
+/*		*/
+/****************/
+
+
+int copy_file(inode *source, inode *target) {
+	int rv = 0, it = 1;
+	int block_count = source->file_size / sblock->cluster_size + 1;
+	char buffer[sblock->cluster_size + 1];
+	
+	buffer[sblock->cluster_size] = 0x00;
+
+	free_allocated_blocks(target); // "remove" data of the previous file
+
+	if(allocate_blocks_for_file(target, block_count)) {
+		return 1;
+	}
+
+	target->file_size = source->file_size;
+
+	while(!rv) {
+		bzero(buffer, sblock->cluster_size + 1);
+
+		rv = read_data_to_buffer(buffer, source, it);
+		if(rv) break; //i spent 2-3 hours to figure this out wtf
+
+		write_data_to_block(buffer, target, it);
+		it++;
+	}
+
+	
+	return 0;
+}
+
+
+int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
+	int32_t tgt_id = tparent, src_id = sparent;
+	int is_new = 0;
+	inode *tgt, *new = NULL;
+
+	
+	inode *sprnt = load_inode_by_id(sparent);
+	return_error_on_condition(!sprnt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	inode *tprnt = load_inode_by_id(tparent);
+	return_error_on_condition(!tprnt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+//loading source
+	if(search_dir(sname, &src_id)) {
+		printf("FILE NOT FOUND");
+		return 1;
+	}
+
+	inode *src = load_inode_by_id(src_id);
+	return_error_on_condition(!src, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	if(src->isDirectory) {
+		printf("CANNOT COPY DIRECTORY\n");
+		return 1;
+	}
+
+	//int block_count = src->file_size / sizeof(sblock->cluster_size) + 1;
+//end loading source
+
+//loading target
+	if(search_dir(tname, &tgt_id)) {
+		tgt = prepare_new_file_node();
+
+		if(!tgt) {
+			//printf("ERROR: Failed to create target. Out of inodes.");
+			free(sprnt);
+			free(tprnt);
+			free(src);
+
+			return 2;
+		}
+
+		is_new = 1;
+	} else {
+		tgt = load_inode_by_id(tgt_id);
+		return_error_on_condition(!tgt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+	}
+//end loading target
+
+	if(tgt->isDirectory == 1) {
+		new = prepare_new_file_node();
+
+		if(!new) {
+			//printf("ERROR: Failed to create target. Out of inodes.");
+			free(sprnt);
+			free(tprnt);
+			free(src);
+			free(tgt);
+
+			return 2;
+		}
+
+		if(copy_file(src, new)) {
+			printf("ERROR COPYING FILE\n");
+		}
+
+		directory_item *di = calloc(1, sizeof(directory_item));
+		di->inode = new->nodeid;
+		memcpy(di->item_name, sname, MAX_ITEM_NAME_LENGTH - 1);
+
+		append_dir_item(di, tgt);
+		save_inode(new);
+	} else if(tgt->isDirectory == 0) {
+		if(copy_file(src, tgt)) {
+			printf("ERROR COPYING FILE\n");
+		}
+
+		if(is_new) {
+			directory_item *di = calloc(1, sizeof(directory_item));
+			di->inode = tgt->nodeid;
+			memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
+	
+			append_dir_item(di, tprnt);
+			save_inode(tgt);
+		}
+	} else {
+		printf("ERROR: Unknown item\n");
+		return 1;
+	}
+
+	free(sprnt);
+	free(tprnt);
+	free(src);
+	free(tgt);
+
+
+	return 0;
+}
+
+/****************/
+/*		*/
+/*    info	*/
+/*		*/
+/****************/
+
+
+int node_info(int32_t where, char *name) {
+	int node_id = where;
+
+	inode *parent = load_inode_by_id(where);
+	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	if(search_dir(name, &node_id)) {
+		printf("ERROR: Failed to find %s\n", name);
+		return 1;
+	} else {
+		inode *node = load_inode_by_id(node_id);
+		return_error_on_condition(!node, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		printf("NAME\tSIZE\tINODE\tREFERENCES\n");
+		printf("%s\t%d\t%d\t%d\n", name, node->file_size, node->nodeid, node->references);
+	}
+
+	return 0;
+}
+
+/****************/
+/*		*/
+/*    outcp	*/
+/*		*/
+/****************/
+
+
+int out_copy(int32_t where, char *name, char *target) {
+	FILE *f = fopen(target, "wb");
+
+	if(!f) {
+		printf("FAILED TO OPEN/ CREATE OUTPUT FILE");
+	}
+
+	int rv = 0, it = 1, write = 0;
+	char buffer[sblock->cluster_size + 1];
+	
+	buffer[sblock->cluster_size] = 0x00;
+
+	if(!search_dir(name, &where)) {
+		inode *nd = load_inode_by_id(where);
+		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		if(nd->isDirectory == 1) {
+			printf("CANNOT OUTPUT DIRECTORY");
+			fclose(f);
+			return 1;
+		}
+
+		while(!rv) {
+			rv = read_data_to_buffer(buffer, nd, it);
+			if(rv) break;
+
+			if((write = nd->file_size - (it - 1) * sblock->cluster_size) > sblock->cluster_size) {
+				write = sblock->cluster_size;
+			}
+
+			printf("Writing %d\n", write);
+
+			fwrite(buffer, sizeof(char), write, f);
+			it++;
+		}
+	} else {
+		fclose(f);
+		//printf("Failed to find %s in dir\n", name);
+		return 1;
+	}
+
+	fclose(f);
 	
 	return 0;
 }
