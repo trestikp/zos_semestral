@@ -90,6 +90,13 @@ inode *load_inode_by_id(int32_t node_id) {
 	//printf("INFO: Loading inode from %ld\n", ftell(fs_file));
 	fread(nd, sizeof(inode), 1, fs_file);
 
+	/*
+	if(nd->isDirectory == 2) {
+		fseek(fs_file, get_inode_address_from_id(nd->direct1), SEEK_SET);
+		fread(nd, sizeof(inode), 1, fs_file);
+	}
+	*/
+
 	if(nd->nodeid != node_id) {
 		printf("ERROR: Loaded node IDs don't match\n");
 	}
@@ -210,7 +217,9 @@ int count_free_blocks() {
 
 	fseek(fs_file, sblock->bitmap_start_address, SEEK_SET);
 
+	//TODO this might be broken
 	while(block < sblock->cluster_count) {
+	//while(block < (sblock->data_start_address - sblock->bitmap_start_address) * 8) {
 		byte = fgetc(fs_file);
 		for(i = 7; i >= 0; i--) {
 			if(!(byte & (1 << i))) count++;
@@ -219,7 +228,7 @@ int count_free_blocks() {
 	}
 
 	//TODO
-	printf("Counted %d free blocks out of %d max\n", count, sblock->cluster_count);
+	//printf("Counted %d free blocks out of %d max\n", count, sblock->cluster_count);
 	
 	return count;
 }
@@ -244,9 +253,8 @@ int append_dir_item(directory_item *di, inode *node) {
 	directory_item *temp = calloc(1, sizeof(directory_item));
 	return_error_on_condition(!temp, MEMORY_ALLOCATION_ERROR_MESSAGE, OUT_OF_MEMORY_ERROR);
 
-	printf("di name: %s\n", di->item_name);
+	//printf("di name: %s\n", di->item_name);
 	
-	//TODO: make sure its not direct1 - 1
 	//fseek(fs_file, sblock->data_start_address + (node->direct1 * sblock->cluster_size), SEEK_SET);
 	fseek(fs_file, get_block_address_from_position(node->direct1), SEEK_SET);
 	fread(temp, sizeof(directory_item), 1, fs_file);
@@ -348,8 +356,6 @@ int free_inode_with_id(int32_t node_id) {
 
 
 void write_buffer_to_block(char buffer[sblock->cluster_size], int32_t block) {
-	//printf("\nWRITING TO %d\n\n", block);
-	//printf("%s", buffer);
 	fseek(fs_file, get_block_address_from_position(block), SEEK_SET);
 	fwrite(buffer, sizeof(char), sblock->cluster_size, fs_file);
 }
@@ -483,13 +489,12 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 
 	// don't need to check for allocate result, because count_free_block
 	// asures that there is enough free blocks (if it works :D)
-	/*
 	if(block_count >= 1) nd->direct1 = allocate_free_block();
 	if(block_count >= 2) nd->direct2 = allocate_free_block();
 	if(block_count >= 3) nd->direct3 = allocate_free_block();
 	if(block_count >= 4) nd->direct4 = allocate_free_block();
 	if(block_count >= 5) nd->direct5 = allocate_free_block();
-	*/
+	/*
 	if(block_count >= 1) {
 		nd->direct1 = allocate_free_block(); 
 		printf("INFO: Allocated block %d\n", nd->direct1);
@@ -510,6 +515,7 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 		nd->direct5 = allocate_free_block(); 
 		printf("INFO: Allocated block %d\n", nd->direct5);
 	}
+	*/
 
 
 	if(block_count >= 6) {
@@ -517,7 +523,7 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 
 	//indirect 1
 		nd->indirect1 = allocate_free_block();
-		printf("INFO: Allocated indirect_1 block %d\n", nd->indirect1);
+		//printf("INFO: Allocated indirect_1 block %d\n", nd->indirect1);
 		zero_data_block(nd->indirect1);
 
 		if(block_count > (sblock->cluster_size / sizeof(int32_t)))
@@ -526,7 +532,7 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 
 		for(i = 0; i < cnt; i++) {
 			blocks[i] = allocate_free_block();
-			printf("INFO: Allocated inner_1 block %d\n", blocks[i]);
+			//printf("INFO: Allocated inner_1 block %d\n", blocks[i]);
 		}
 
 		fseek(fs_file, get_block_address_from_position(nd->indirect1), SEEK_SET);
@@ -919,6 +925,19 @@ uint64_t get_dir_item_address(inode *parent, int32_t id) {
 			return ftell(fs_file);
 		}
 	}
+
+	return 0;
+}
+
+int load_linked_node(inode **nd) {
+	if((*nd)->isDirectory == 2) {
+		int32_t new_id = (*nd)->direct1;
+
+		free((*nd));
+
+		(*nd) = load_inode_by_id(new_id);
+		return_error_on_condition(!(*nd), MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+	} else return 2;
 
 	return 0;
 }

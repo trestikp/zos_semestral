@@ -23,6 +23,6 @@ int mv(char *source, char *target);
 int cp(char *source, char *target);
 int info(char *path);
 int outcp(char *source, char *target);
-
+int slink(char *source, char *link);
 
 #endif

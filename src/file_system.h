@@ -78,6 +78,7 @@ int free_inode_with_id(int32_t node_id);
 directory_item *extract_dir_item_from_dir(int32_t where, int32_t item_id);
 directory_item *extract_dir_item_from_dir_2(inode *nd);
 uint64_t get_dir_item_address(inode *parent, int32_t id);
+int load_linked_node(inode **nd);
 
 //int create_filesystem(uint64_t max_size);
 //int make_directory(char *name, int32_t parent_nid);

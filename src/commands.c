@@ -47,10 +47,10 @@ int32_t traverse_path(char *path) {
 
         if(path[0] == '/') {
                 node_id = root->nodeid;
-                printf("ROOD ID: %d\n", root->nodeid);
+               	//printf("ROOD ID: %d\n", root->nodeid);
         } else {
                 node_id = position->nodeid;
-                printf("POSITION ID: %d\n", node_id);
+                //printf("POSITION ID: %d\n", node_id);
         }
 
 	path_cpy = calloc(strlen(path) + 1, sizeof(char));
@@ -387,7 +387,16 @@ int change_dir(int32_t target_id) {
 
 	free(position);
 
-	position = load_inode_by_id(target_id);
+	inode *nd = load_inode_by_id(target_id);
+
+	if(nd->isDirectory == 2) { //if it is link load referenced node
+		if(load_linked_node(&nd)) {
+			printf("ERROR: Failed to load linked node\n");
+			return 1;
+		}
+	}
+
+	position = nd;
 
 	return 0;
 }
@@ -455,7 +464,7 @@ inode *prepare_new_file_node() {
 	int32_t new_nd = 0;
 	inode *nd = NULL;
 
-	printf("CREATING NEW NODE\n");
+
 	if((new_nd = allocate_free_inode())) {
 		nd = load_inode_by_id(new_nd + 1); //new_nd is position not id!!!
 		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
@@ -534,6 +543,13 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
 	if(exists) {
+		if(nd->isDirectory == 2) { //if it is link load referenced node
+			if(load_linked_node(&nd)) {
+				printf("ERROR: Failed to load linked node\n");
+				return 1;
+			}
+		}
+
 		if(nd->isDirectory == 0) {
 			free_allocated_blocks(nd);
 			copy_file_to_node(f, nd);
@@ -588,6 +604,13 @@ int remove_directory(int32_t node_id) {
 	inode *nd = load_inode_by_id(node_id);
 	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
+	if(nd->isDirectory == 2) { //link
+		if(load_linked_node(&nd)) {
+			printf("ERROR: Failed to load linked node\n");
+			return 3;
+		}
+	}
+
 	if(nd->isDirectory != 1) {
 		printf("ISN'T DIR\n");
 	}
@@ -623,6 +646,13 @@ int cat_file(int32_t where, char *name) {
 	if(!search_dir(name, &where)) {
 		inode *nd = load_inode_by_id(where);
 		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		if(nd->isDirectory == 2) { //if it is link load referenced node
+			if(load_linked_node(&nd)) {
+				printf("ERROR: Failed to load linked node\n");
+				return 1;
+			}
+		}
 
 		while(!rv) {
 			rv = read_data_to_buffer(buffer, nd, it);
@@ -670,6 +700,7 @@ int remove_file(int32_t where, char *name) {
 
 int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	int32_t tgt_id = tparent, src_id = sparent;
+	int target_exists = 0;
 
 	
 	inode *sprnt = load_inode_by_id(sparent);
@@ -678,15 +709,34 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	inode *tprnt = load_inode_by_id(tparent);
 	return_error_on_condition(!tprnt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
-	if(search_dir(tname, &tgt_id)) {
-		printf("ERROR: Failed to find target in parent");
+	if(search_dir(sname, &src_id)) {
+		printf("ERROR: Failed to find source in parent dir");
 		return 1;
 	}
 
-	if(search_dir(sname, &src_id)) {
-		printf("ERROR: Failed to find target in parent");
-		return 1;
+	if(search_dir(tname, &tgt_id)) {
+		target_exists = 0;
+	} else {
+		target_exists = 1;
 	}
+	/*
+		tgt = prepare_new_file_node();
+
+		if(!tgt) {
+			//printf("ERROR: Failed to create target. Out of inodes.");
+			free(sprnt);
+			free(tprnt);
+			free(src);
+
+			return 2;
+		}
+
+		is_new = 1;
+	} else {
+		tgt = load_inode_by_id(tgt_id);
+		return_error_on_condition(!tgt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+	}
+	*/
 
 
 	inode *src = load_inode_by_id(src_id);
@@ -694,6 +744,22 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 
 	inode *tgt = load_inode_by_id(tgt_id);
 	return_error_on_condition(!tgt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+/* probably don't want this in mv, as i might want to move the links themselves
+	if(src->isDirectory == 2) {
+		if(load_linked_node(&src)) {
+			printf("ERROR: Failed to load linked node\n");
+			return 3;
+		}
+	}
+
+	if(tgt->isDirectory == 2) {
+		if(load_linked_node(&tgt)) {
+			printf("ERROR: Failed to load linked node\n");
+			return 3;
+		}
+	}
+*/
 
 	if(src->isDirectory == 1 && tgt->isDirectory != 1) {
 		printf("CANNOT MOVE DIR TO FILE\n");
@@ -708,18 +774,30 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 
 		free(di);
 	} else if(tgt->isDirectory == 0) {
-		remove_dir_item(tprnt->nodeid, tgt->nodeid);
-		free_inode_with_id(tgt->nodeid);
+		if(target_exists) {
+			remove_dir_item(tprnt->nodeid, tgt->nodeid);
+			free_inode_with_id(tgt->nodeid);
 
-		directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
-		return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+			directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
+			return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
-		bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
-		memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
+			bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
+			memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
 
-		append_dir_item(di, tprnt);
+			append_dir_item(di, tprnt);
 
-		free(di);
+			free(di);
+		} else {
+			directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
+			return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+			bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
+			memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
+
+			append_dir_item(di, tprnt);
+
+			free(di);
+		}
 	} else {
 		printf("ERROR: Unknown item\n");
 		return 1;
@@ -791,6 +869,13 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	inode *src = load_inode_by_id(src_id);
 	return_error_on_condition(!src, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
+	if(src->isDirectory == 2) { //link (apperently cp, copies the target behind link)
+		if(load_linked_node(&src)) {
+			printf("ERROR: Failed to load linked node\n");
+			return 3;
+		}
+	}
+	
 	if(src->isDirectory) {
 		printf("CANNOT COPY DIRECTORY\n");
 		return 1;
@@ -818,6 +903,14 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 		return_error_on_condition(!tgt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 	}
 //end loading target
+
+	if(tgt->isDirectory == 2) { // link, (as above)
+		if(load_linked_node(&tgt)) {
+			printf("ERROR: Failed to load linked node\n");
+			return 3;
+		}
+	}
+
 
 	if(tgt->isDirectory == 1) {
 		new = prepare_new_file_node();
@@ -889,6 +982,13 @@ int node_info(int32_t where, char *name) {
 		inode *node = load_inode_by_id(node_id);
 		return_error_on_condition(!node, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
+		if(node->isDirectory == 2) { // link , TODO do i want links on info?
+			if(load_linked_node(&node)) {
+				printf("ERROR: Failed to load linked node\n");
+				return 1;
+			}
+		}
+
 		printf("NAME\tSIZE\tINODE\tREFERENCES\n");
 		printf("%s\t%d\t%d\t%d\n", name, node->file_size, node->nodeid, node->references);
 	}
@@ -919,6 +1019,14 @@ int out_copy(int32_t where, char *name, char *target) {
 		inode *nd = load_inode_by_id(where);
 		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
+		if(nd->isDirectory == 2) { //link
+			if(load_linked_node(&nd)) {
+				printf("ERROR: Failed to load linked node\n");
+				return 3;
+			}
+		}
+
+
 		if(nd->isDirectory == 1) {
 			printf("CANNOT OUTPUT DIRECTORY");
 			fclose(f);
@@ -933,7 +1041,7 @@ int out_copy(int32_t where, char *name, char *target) {
 				write = sblock->cluster_size;
 			}
 
-			printf("Writing %d\n", write);
+			//printf("Writing %d\n", write);
 
 			fwrite(buffer, sizeof(char), write, f);
 			it++;
@@ -945,6 +1053,43 @@ int out_copy(int32_t where, char *name, char *target) {
 	}
 
 	fclose(f);
+	
+	return 0;
+}
+
+/****************/
+/*		*/
+/*    slink	*/
+/*		*/
+/****************/
+
+
+int symbolic_link(int32_t src, int32_t par, char *name) {
+	int32_t id = par;
+	
+	if(search_dir(name, &id) != 1) {
+		printf("ERROR: Item with name %s already exists\n", name);
+		return 1;
+	}
+
+	inode *parent = load_inode_by_id(par);
+	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+	inode *new = prepare_new_file_node();
+	new->isDirectory = 2;
+	new->direct1 = src;
+	new->file_size = strlen(name);
+
+	directory_item *di = calloc(1, sizeof(directory_item));
+	di->inode = new->nodeid;
+	memcpy(di->item_name, name, MAX_ITEM_NAME_LENGTH - 1);
+
+	append_dir_item(di, parent);
+	save_inode(new);
+
+	free(di);
+	free(parent);
+	free(new);
 	
 	return 0;
 }

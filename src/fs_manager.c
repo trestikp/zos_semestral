@@ -349,3 +349,21 @@ int outcp(char *source, char *target) {
 	
 	return 0;
 }
+
+
+int slink(char *source, char *link) {
+	char *name = NULL;
+	char *link_cpy = calloc(strlen(link) + 1, sizeof(char));
+
+	strcpy(link_cpy, link);
+	extract(link_cpy, &name);
+
+	int32_t par = traverse_path(link_cpy);
+	if(!par) return 1;
+	int32_t src = traverse_path(source);
+	if(!src) return 1;
+
+	symbolic_link(src, par, name);
+
+	return 0;
+}
