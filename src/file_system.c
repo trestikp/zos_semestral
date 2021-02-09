@@ -84,22 +84,7 @@ inode *load_inode_by_id(int32_t node_id) {
 	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
 
 	fseek(fs_file, get_inode_address_from_id(node_id), SEEK_SET);
-	//printf("\n\n --- bitmap --- \n");
-	//print_inode_bitmap();
-	//printf("--- bitmap --- \n\n");
-	//printf("INFO: Loading inode from %ld\n", ftell(fs_file));
 	fread(nd, sizeof(inode), 1, fs_file);
-
-	/*
-	if(nd->isDirectory == 2) {
-		fseek(fs_file, get_inode_address_from_id(nd->direct1), SEEK_SET);
-		fread(nd, sizeof(inode), 1, fs_file);
-	}
-	*/
-
-	if(nd->nodeid != node_id) {
-		printf("ERROR: Loaded node IDs don't match\n");
-	}
 	
 	return nd;
 }
@@ -228,7 +213,7 @@ int count_free_blocks() {
 	}
 
 	//TODO
-	//printf("Counted %d free blocks out of %d max\n", count, sblock->cluster_count);
+	printf("Counted %d free blocks out of %d max\n", count, sblock->cluster_count);
 	
 	return count;
 }
@@ -265,7 +250,7 @@ int append_dir_item(directory_item *di, inode *node) {
 	}
 
 	if(counter >= MAX_DIR_ITEMS_IN_BLOCK) {
-		printf("CANNOT CREATE ANOTHER DIRECTORY");
+		printf("CANNOT CREATE ANOTHER DIRECTORY\n");
 		//print error
 		free(temp);
 		return 1;
@@ -375,23 +360,27 @@ void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int block_num) {
 		case 5: write_buffer_to_block(buffer, nd->direct5); break;
 	}
 
-	if(block_num > 5 && block_num <= number_of_indirects) {
+	if(block_num > 5 && block_num <= (number_of_indirects + 5)) {
 		fseek(fs_file, get_block_address_from_position(nd->indirect1) +
 			(block_num - 6) * sizeof(int32_t), SEEK_SET);
 		fread(&block, sizeof(int32_t), 1, fs_file);
 
 		write_buffer_to_block(buffer, block);
-	} else if(block_num > number_of_indirects) {
-		int div = block_num / number_of_indirects - 1; //get indirect layer TODO verify -1
-		int mod = block_num % number_of_indirects; //get position in indirect layer
+	} else if(block_num > (number_of_indirects + 5)) {
+		int div = (block_num - 6) / number_of_indirects - 1; //get indirect layer 
+		int mod = (block_num - 6) % number_of_indirects; //get position in indirect layer
 		int32_t outer = 0;
 
-		fseek(fs_file, get_block_address_from_position(nd->indirect2) +
-			div * sizeof(int32_t), SEEK_SET);
+		fseek(fs_file, get_block_address_from_position(nd->indirect2) + div * sizeof(int32_t), SEEK_SET);
 		fread(&outer, sizeof(int32_t), 1, fs_file);
 
 		fseek(fs_file, get_block_address_from_position(outer) + mod * sizeof(int32_t), SEEK_SET);
-		fread(&block, sizeof(int32_t), 1, fs_file);// TODO will this work?
+		fread(&block, sizeof(int32_t), 1, fs_file);
+
+		if(!outer || !block) {
+			printf("ERROR: Canno't write to position 0\n");
+			return;
+		}
 
 		write_buffer_to_block(buffer, block);
 	}
@@ -417,13 +406,13 @@ int read_data_to_buffer(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num) {
 		case 5: block = nd->direct5; break;
 	}
 
-	if(block_num > 5 && block_num <= number_of_indirects) {
+	if(block_num > 5 && block_num <= (number_of_indirects + 5)) {
 		fseek(fs_file, get_block_address_from_position(nd->indirect1) +
 			(block_num - 6) * sizeof(int32_t), SEEK_SET);
 		fread(&block, sizeof(int32_t), 1, fs_file);
-	} else if(block_num > number_of_indirects) {
-		int div = block_num / number_of_indirects - 1; //get indirect layer TODO verify -1
-		int mod = block_num % number_of_indirects; //get position in indirect layer
+	} else if(block_num > (number_of_indirects + 5)) {
+		int div = (block_num - 6) / number_of_indirects - 1; //get indirect layer
+		int mod = (block_num - 6) % number_of_indirects; //get position in indirect layer
 		int32_t outer = 0;
 
 		fseek(fs_file, get_block_address_from_position(nd->indirect2) +
@@ -440,8 +429,8 @@ int read_data_to_buffer(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num) {
 		read_block_to_buffer(buffer, block);
 
 		/*
-		if((nd->file_size - (block_num * sblock->cluster_size)) < sblock->cluster_size) {
-			//buffer[nd->file_size - (block_num * sblock->cluster_size)] = 0x00;
+		if((nd->file_size - ((block_num-1) * sblock->cluster_size)) < sblock->cluster_size) {
+			//buffer[nd->file_size - ((block_num-1) * sblock->cluster_size)] = 0x00;
 		}
 		*/
 
@@ -465,8 +454,6 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 	int i = 0, cnt = 0, additional = 0;
 	int32_t blocks[sblock->cluster_size / sizeof(int32_t)];
 
-	printf("ALLOCATING %d BLOCKS\n", block_count);
-
 
 	if(block_count <= 0) {
 		printf("ERROR: Block count mustn't be <= 0\n");
@@ -474,6 +461,7 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 	}
 
 	cnt = count_free_blocks(); //figured counting is faster then allocating and freeing on failure
+
 	//number of additional blocks needed for indirect
 	additional = block_count / (sblock->cluster_size / sizeof(int32_t)); //TODO probably not accurate
 
@@ -517,13 +505,11 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 	}
 	*/
 
-
 	if(block_count >= 6) {
 		block_count -= 5;
 
 	//indirect 1
 		nd->indirect1 = allocate_free_block();
-		//printf("INFO: Allocated indirect_1 block %d\n", nd->indirect1);
 		zero_data_block(nd->indirect1);
 
 		if(block_count > (sblock->cluster_size / sizeof(int32_t)))
@@ -532,7 +518,6 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 
 		for(i = 0; i < cnt; i++) {
 			blocks[i] = allocate_free_block();
-			//printf("INFO: Allocated inner_1 block %d\n", blocks[i]);
 		}
 
 		fseek(fs_file, get_block_address_from_position(nd->indirect1), SEEK_SET);
@@ -541,12 +526,13 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 		block_count -= cnt;
 	//indirect 1 end
 
-		if(block_count > 0) { // do indirect2
+	// do indirect2
+		if(block_count > 0) { 
 			nd->indirect2 = allocate_free_block();
 			zero_data_block(nd->indirect2);
 
 			int iter = 0;
-			int32_t another = 0;
+			int32_t outers[BLOCK_SIZE / sizeof(int32_t)] = {0};
 
 			while(block_count > 0) {
 				if(block_count > (sblock->cluster_size / sizeof(int32_t)))
@@ -557,21 +543,21 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 					blocks[i] = allocate_free_block();
 				}
 	
-				//write data blocks to "inside" block
-				another = allocate_free_block();
-				zero_data_block(another);
+				outers[iter] = allocate_free_block();
+				zero_data_block(outers[iter]);
 
-				fseek(fs_file, get_block_address_from_position(another), SEEK_SET);
+				fseek(fs_file, get_block_address_from_position(outers[iter]), SEEK_SET);
 				fwrite(blocks, sizeof(int32_t), cnt, fs_file);
 
-				//write "inside" block to indirect2
-				fseek(fs_file, nd->indirect2 + iter * sizeof(int32_t), SEEK_SET);
-				fwrite(&another, sizeof(int32_t), 1, fs_file);
-	
 				block_count -= cnt;
 				iter++;
 			}
+
+			fseek(fs_file, get_block_address_from_position(nd->indirect2), SEEK_SET);
+			fwrite(outers, sizeof(int32_t), BLOCK_SIZE / sizeof(int32_t), fs_file);
 		}
+
+		save_inode(nd);
 	}
 	
 	return 0;
@@ -742,7 +728,7 @@ int remove_dir_node_2(inode *nd) {
 	int i = 0, count = 0, passed = 0;
 	directory_item content[MAX_DIR_ITEMS_IN_BLOCK] = {0}, di;
 
-	printf("Removing dir with nodeid %d\n", nd->nodeid);
+	//printf("Removing dir with nodeid %d\n", nd->nodeid);
 
 	if(search_dir("..", &parent_id)) {
 		printf("ERROR: Failed to find parent dir\n");
@@ -771,7 +757,7 @@ int remove_dir_node_2(inode *nd) {
 		count++;
 	}
 
-	printf("Removing dir item from nodeid %d\n COUNT: %d\n", parent->nodeid, count);
+	//printf("Removing dir item from nodeid %d\n COUNT: %d\n", parent->nodeid, count);
 
 	zero_data_block(parent->direct1);
 	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
@@ -817,7 +803,7 @@ int remove_dir_item(int32_t parent_nid, int32_t di_nid) {
 		count++;
 	}
 
-	printf("Removing dir item from nodeid %d\n COUNT: %d\n", parent->nodeid, count);
+	//printf("Removing dir item from nodeid %d\n COUNT: %d\n", parent->nodeid, count);
 
 	zero_data_block(parent->direct1);
 	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);

@@ -36,21 +36,23 @@ int32_t traverse_path(char *path) {
         int32_t node_id = 0;
 
         if(path == NULL) {
-		path = calloc(2, sizeof(char));
+		char fake[2] = {0};
+		//path = calloc(2, sizeof(char));
 
-		if(!path) return -1;
+		//if(!path) return -1;
 
-                path[0] = '.';
-                path[1] = 0x00;
-		//TODO: FREE THIS
+                //path[0] = '.';
+                //path[1] = 0x00;
+		fake[0] = '.';
+		fake[1] = 0x00;
+
+		path = fake;
         }
 
         if(path[0] == '/') {
                 node_id = root->nodeid;
-               	//printf("ROOD ID: %d\n", root->nodeid);
         } else {
                 node_id = position->nodeid;
-                //printf("POSITION ID: %d\n", node_id);
         }
 
 	path_cpy = calloc(strlen(path) + 1, sizeof(char));
@@ -67,7 +69,7 @@ int32_t traverse_path(char *path) {
 		ret = search_dir(token, &node_id);
 
 		if(ret == 1) {
-			printf("FILE NOT FOUND\n");
+			printf("FILE NOT FOUND (traversing path)\n");
 			break;
 		} else if(ret == 2) {
 			on_way = 1;
@@ -347,11 +349,25 @@ int list_dir_contents(int32_t node_id) {
 	inode *nd = malloc(sizeof(inode));
 	return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 3);
 
-	directory_item *di = malloc(sizeof(directory_item));
-	return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 3);
-
 	fseek(fs_file, address, SEEK_SET);
 	fread(nd, sizeof(inode), 1, fs_file);
+
+	if(nd->isDirectory == 2) { //ls target is link -> ls link source
+		if(load_linked_node(&nd)) {
+			printf("ERROR: Failed to load linked node\n");
+			return 1;
+		}
+	}
+
+	if(nd->isDirectory != 1) {
+		printf("PATH NOT FOUND (non-existend dir)\n");
+
+		free(nd);
+		return 1;
+	}
+
+	directory_item *di = malloc(sizeof(directory_item));
+	return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 3);
 
 	fseek(fs_file, sblock->data_start_address + nd->direct1 * sblock->cluster_size, SEEK_SET);
 	fread(di, sizeof(directory_item), 1, fs_file);
@@ -381,12 +397,6 @@ int list_dir_contents(int32_t node_id) {
 /****************/
 
 int change_dir(int32_t target_id) {
-	if(!target_id) {
-		return 1;
-	}
-
-	free(position);
-
 	inode *nd = load_inode_by_id(target_id);
 
 	if(nd->isDirectory == 2) { //if it is link load referenced node
@@ -396,6 +406,12 @@ int change_dir(int32_t target_id) {
 		}
 	}
 
+	if(nd->isDirectory == 0) {
+		printf("TARGET IS A FILE\n");
+		return 2;
+	}
+
+	free(position);
 	position = nd;
 
 	return 0;
@@ -489,11 +505,11 @@ int copy_file_to_node(FILE *f, inode *nd) {
 	//get file size
 	fseek(f, 0L, SEEK_END);
 	size = ftell(f);
-	printf("File size: %ld\n", size);
+	//printf("File size: %ld\n", size);
 	fseek(f, 0L, SEEK_SET);
 
 	int block_count = size / sblock->cluster_size + 1;
-	printf("Will need %d blocks\n",block_count);
+	//printf("Will need %d blocks\n",block_count);
 
 	if(allocate_blocks_for_file(nd, block_count)) { //failed to allocate blocks
 		return 1;
@@ -529,7 +545,7 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 
 	//test fopen
 	if(!f) {
-		printf("FILE NOT FOUND (missing source)");
+		printf("FILE NOT FOUND (source)\n");
 		return 1;
 	}
 
@@ -654,6 +670,13 @@ int cat_file(int32_t where, char *name) {
 			}
 		}
 
+		if(nd->isDirectory == 1) {
+			printf("CANNOT CAT DIR\n");
+
+			free(nd);
+			return 1;
+		}
+		
 		while(!rv) {
 			rv = read_data_to_buffer(buffer, nd, it);
 			if(rv) break;
@@ -661,7 +684,7 @@ int cat_file(int32_t where, char *name) {
 			it++;
 		}
 	} else {
-		//printf("Failed to find %s in dir\n", name);
+		printf("FILE NOT FOUND\n");
 		return 1;
 	}
 	
@@ -679,12 +702,21 @@ int remove_file(int32_t where, char *name) {
 	int parent = where;
 
 	if(!search_dir(name, &where)) {
-		//inode *nd = load_inode_by_id(where);
-		//return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+		inode *nd = load_inode_by_id(where);
+		return_error_on_condition(!nd, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		if(nd->isDirectory == 1) {
+			printf("RM CANNOT REMOVE DIR\n");
+
+			free(nd);
+			return 1;
+		}
+		free(nd);
 
 		remove_dir_item(parent, where);
-		//remove_dir_node_2(nd);
-		//free_inode_with_id(where);
+	} else {
+		printf("FILE NOT FOUND\n");
+		return 1;
 	}
 
 	return 0;
@@ -843,6 +875,7 @@ int copy_file(inode *source, inode *target) {
 		it++;
 	}
 
+	save_inode(target);
 	
 	return 0;
 }
@@ -862,7 +895,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 
 //loading source
 	if(search_dir(sname, &src_id)) {
-		printf("FILE NOT FOUND");
+		printf("FILE NOT FOUND (source)\n");
 		return 1;
 	}
 
@@ -883,6 +916,11 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 
 	//int block_count = src->file_size / sizeof(sblock->cluster_size) + 1;
 //end loading source
+
+	if(tprnt->isDirectory == 0 || tprnt->isDirectory == 2) {
+		printf("PARENT ISN'T DIR\n");
+		return 4;
+	}
 
 //loading target
 	if(search_dir(tname, &tgt_id)) {
@@ -934,7 +972,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 		memcpy(di->item_name, sname, MAX_ITEM_NAME_LENGTH - 1);
 
 		append_dir_item(di, tgt);
-		save_inode(new);
+		//save_inode(new);
 	} else if(tgt->isDirectory == 0) {
 		if(copy_file(src, tgt)) {
 			printf("ERROR COPYING FILE\n");
@@ -946,7 +984,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 			memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
 	
 			append_dir_item(di, tprnt);
-			save_inode(tgt);
+			//save_inode(tgt);
 		}
 	} else {
 		printf("ERROR: Unknown item\n");
@@ -976,7 +1014,7 @@ int node_info(int32_t where, char *name) {
 	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
 	if(search_dir(name, &node_id)) {
-		printf("ERROR: Failed to find %s\n", name);
+		printf("FILE NOT FOUND\n");
 		return 1;
 	} else {
 		inode *node = load_inode_by_id(node_id);
@@ -1007,7 +1045,8 @@ int out_copy(int32_t where, char *name, char *target) {
 	FILE *f = fopen(target, "wb");
 
 	if(!f) {
-		printf("FAILED TO OPEN/ CREATE OUTPUT FILE");
+		printf("FAILED TO OPEN/ CREATE OUTPUT FILE\n");
+		return 4;
 	}
 
 	int rv = 0, it = 1, write = 0;
@@ -1028,10 +1067,12 @@ int out_copy(int32_t where, char *name, char *target) {
 
 
 		if(nd->isDirectory == 1) {
-			printf("CANNOT OUTPUT DIRECTORY");
+			printf("CANNOT OUTPUT DIRECTORY\n");
 			fclose(f);
 			return 1;
 		}
+
+		//printf("FILE SIZE: %d\n", nd->file_size);
 
 		while(!rv) {
 			rv = read_data_to_buffer(buffer, nd, it);

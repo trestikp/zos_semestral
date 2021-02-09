@@ -91,64 +91,63 @@ uint8_t process_command(char *command_parts[3]) {
 
 	if(!strcmp(command_parts[0], "exit")) return 1;
 
+	extern bool fs_loaded;
+	if(strcmp(command_parts[0], "format") && !fs_loaded) {
+		return 6;
+	}
+
 	if(!strcmp(command_parts[0], "cp")) {
 		if(!command_parts[1] || !command_parts[2]) return 5;
-		cp(command_parts[1], command_parts[2]);
+		ret = cp(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "mv")) {
 		if(!command_parts[1] || !command_parts[2]) return 5;
-		mv(command_parts[1], command_parts[2]);
+		ret = mv(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "rm")) {
 		if(!command_parts[1]) return 3;
 		if(command_parts[2] != NULL) return 4;
 		ret = rm(command_parts[1]); 
-		printf("ret; %d\n", ret);
 	}
 	else if(!strcmp(command_parts[0], "mkdir")) {
 		if(!command_parts[1]) return 3;
 		if(command_parts[2] != NULL) return 4;
 		ret = mkdir(command_parts[1]);
-		printf("ret; %d\n", ret);
 	}
 	else if(!strcmp(command_parts[0], "rmdir")) {
 		if(!command_parts[1]) return 3;
 		if(command_parts[2] != NULL) return 4;
 		ret = rmdir(command_parts[1]); 
-		printf("ret; %d\n", ret);
-
 	}
 	else if(!strcmp(command_parts[0], "ls")) {
 		if(command_parts[2] != NULL) return 4;
-		ls(command_parts[1]);
+		ret = ls(command_parts[1]);
 	}
 	else if(!strcmp(command_parts[0], "cat")) {
 		if(!command_parts[1]) return 3;
 		if(command_parts[2] != NULL) return 4;
 		ret = cat(command_parts[1]);
-		printf("ret; %d\n", ret);
 	}
 	else if(!strcmp(command_parts[0], "cd")) {
 		if(command_parts[2]) return 4;
 		ret = cd(command_parts[1]);
-		printf("ret; %d\n", ret);
 	}
 	else if(!strcmp(command_parts[0], "pwd")) {
 		if(command_parts[1] || command_parts[2]) return 4;
-		pwd();
+		ret = pwd();
 	}
 	else if(!strcmp(command_parts[0], "info")) {
 		if(!command_parts[1]) return 3;
 		if(command_parts[2] != NULL) return 4;
-		info(command_parts[1]);
+		ret = info(command_parts[1]);
 	}
 	else if(!strcmp(command_parts[0], "incp")) {
 		if(!command_parts[1] || !command_parts[2]) return 5;
-		incp(command_parts[1], command_parts[2]);
+		ret = incp(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "outcp")) {
 		if(!command_parts[1] || !command_parts[2]) return 5;
-		outcp(command_parts[1], command_parts[2]);
+		ret = outcp(command_parts[1], command_parts[2]);
 	}
 	else if(!strcmp(command_parts[0], "load")) {
 		if(!command_parts[1]) return 3;
@@ -158,14 +157,16 @@ uint8_t process_command(char *command_parts[3]) {
 	else if(!strcmp(command_parts[0], "format")) {
 		if(!command_parts[1]) return 3;
 		if(command_parts[2] != NULL) return 4;
-		format(command_parts[1]);
+		ret = format(command_parts[1]);
 	}
 	else if(!strcmp(command_parts[0], "slink")) {
 		if(!command_parts[1] || !command_parts[2]) return 5;
-		slink(command_parts[1], command_parts[2]);
+		ret = slink(command_parts[1], command_parts[2]);
 	} else {
 		return 2;
 	}
+
+	//printf("Command return value: %d\n", ret);
 
 	return 0;
 }
@@ -210,6 +211,7 @@ uint8_t run_console() {
 			case 3: print_error("Command requires 1 argument."); break;
 			case 4: print_error("Too many arguments."); break;
 			case 5: print_error("Requires 2 arguments"); break;
+			case 6: print_error("Cannot use this command while fs isn't loaded");
 		}
 	}
 

@@ -6,10 +6,12 @@
 
 char *fs_filename = NULL;
 FILE *fs_file = NULL;
+
 extern superblock *sblock;
 extern inode *position;
 extern const inode *root;
-static bool fs_loaded = false;
+
+bool fs_loaded = false;
 
 /*
 	Actually only loads superblock to global variable *sblock
@@ -49,6 +51,7 @@ int load_filesystem() {
 	return 0;
 }
 
+
 int format(char *size) {
 	//FILE *fs_file = NULL;
 	uint64_t max_size = 0;
@@ -69,7 +72,7 @@ int format(char *size) {
 	// if unit format is more then 2 characters
 	if(units[2]) {
 		print_error("Unrecognized unit format. Example unit format: MB, GB");
- 		return 7; // TODO return error value
+ 		return 1;
 	} else { 
 		switch(units[0]) {
 			case 'k':
@@ -83,29 +86,36 @@ int format(char *size) {
 			case 'p':
 			case 'P': max_size = number * pow(2, 50); break;
 			default: print_error("Unrecognized size.");
-				return 7; // TODO error code
+				return 2; 
+		}
+
+		if(units[1] != 'B') {
+			print_error("Unrecognized unit.");
+			return 3;
 		}
 
 		// allow "bits" ??? 
+		/* nope I don't want to deal with bits, its stupid
 		if(units[1] == 'b') max_size /= 8;
 		else if(units[1] != 'B') {
 			print_error("Unrecognized unit.");
-			return 7; // TODO err code
+			return 3;
 		}
+		*/
 	}
 
 	// if there isnt enough space on storage device for unprivileged user
 	if(max_size > (vfs->f_bavail * vfs->f_bsize)) {
 		free(vfs);
 		print_command_result(FORMAT_CMD_ERROR);
-		return 7; // TODO
+		return 4;
 	}
 
 	//return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 	if(!(fs_file = fopen(fs_filename, "wb+"))) {
 		free(vfs);
-		print_error("File open failed.. TODO"); // TODO error msg
-		return 7; // return some error number TODO
+		print_error("ERROR: Failed to open file");
+		return 5;
 	}
 
 	create_filesystem(max_size);
@@ -146,6 +156,25 @@ int extract(char *ppath, char **pname) {
 }
 
 
+int ugly_workaround_existence(char *path, int32_t target) {
+	//ugly workaround to prevent listing even when the item @name doesn't exist
+	//otherwise ls lists content of current dir, even when the final target doesn't exist
+	if(path) {
+		char *name = NULL;
+		char *cpy = calloc(strlen(path) + 1, sizeof(char));
+		strcpy(cpy, path);
+		extract(cpy, &name);
+	
+		int32_t par_id = traverse_path(cpy);
+		if(!par_id || (par_id == target)) return 1;
+	}
+	// end
+
+	return 0;
+}
+
+
+
 int mkdir(char *path) {
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 
@@ -180,42 +209,42 @@ int rmdir(char* path) {
 
 	if(!target) return 1;
 
-	remove_directory(target);
+	return remove_directory(target);
 
-	return 0;
+	//return 0;
 }
 
 int cd(char *path) {
 	int32_t target = traverse_path(path);
-	
-	printf("cd target: %d\n", target);
 
-	change_dir(target);
+	if(!target) return 1;
 
-	return 0;
+	if(ugly_workaround_existence(path, target)) return 2;
+
+	return change_dir(target);
+	//return 0;
 }
 
 int ls(char *path) {
 	int32_t end_nid = 0;
 	end_nid = traverse_path(path);
 
-	if(!end_nid) {
-		return 0;
-	}
+	if(!end_nid) return 1;
 
-	list_dir_contents(end_nid);
-	
-	return 0;
+	if(ugly_workaround_existence(path, end_nid)) return 2;
+
+	return list_dir_contents(end_nid);
+	//return 0;
 }
 
 int pwd() {
-	print_working_dir();
-
-	return 0;
+	return print_working_dir();
+	//return 0;
 }
 
 
 int incp(char *source, char *target) {
+	int rv = 0;
 	char *source_name = NULL, *target_name = NULL;
 	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
 	char *target_cpy = calloc(strlen(target) + 1, sizeof(char));
@@ -228,15 +257,16 @@ int incp(char *source, char *target) {
 	int32_t tnode = traverse_path(target_cpy);
 	if(!tnode) return 1;
 
-	in_copy(source, tnode, source_name, target_name);
+	rv = in_copy(source, tnode, source_name, target_name);
 
 	free(source_cpy);
 	free(target_cpy);
 
-	return 0;
+	return rv;
 }
 
 int cat(char *path) {
+	int rv = 0;
 	char *name = NULL;
 	char *path_cpy = calloc(strlen(path) + 1, sizeof(char));
 
@@ -246,14 +276,15 @@ int cat(char *path) {
 	int32_t tnode = traverse_path(path_cpy);
 	if(!tnode) return 1;
 
-	cat_file(tnode, name);
+	rv = cat_file(tnode, name);
 
 	free(path_cpy);
 
-	return 0;
+	return rv;
 }
 
 int rm(char *path) {
+	int rv = 0;
 	char *name = NULL;
 	char *path_cpy = calloc(strlen(path) + 1, sizeof(char));
 
@@ -263,13 +294,14 @@ int rm(char *path) {
 	int32_t tnode = traverse_path(path_cpy);
 	if(!tnode) return 1;
 
-	remove_file(tnode, name);
+	rv = remove_file(tnode, name);
 
-	return 0;
+	return rv; 
 }
 
 
 int mv(char *source, char *target) {
+	int rv = 0;
 	char *source_name = NULL, *target_name = NULL;
 	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
 	char *target_cpy = calloc(strlen(target) + 1, sizeof(char));
@@ -285,16 +317,17 @@ int mv(char *source, char *target) {
 	int32_t tnode = traverse_path(target_cpy);
 	if(!tnode) return 1;
 
-	move(snode, tnode, source_name, target_name);
+	rv = move(snode, tnode, source_name, target_name);
 
 	free(source_cpy);
 	free(target_cpy);
 
-	return 0;
+	return rv; 
 }
 
 
 int cp(char *source, char *target) {
+	int rv = 0;
 	char *source_name = NULL, *target_name = NULL;
 	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
 	char *target_cpy = calloc(strlen(target) + 1, sizeof(char));
@@ -304,18 +337,17 @@ int cp(char *source, char *target) {
 	extract(source_cpy, &source_name);
 	extract(target_cpy, &target_name);
 
-	//int32_t tnode = traverse_path(target);
 	int32_t snode = traverse_path(source_cpy);
 	if(!snode) return 1;
 	int32_t tnode = traverse_path(target_cpy);
 	if(!tnode) return 1;
 
-	copy(snode, tnode, source_name, target_name);
+	rv = copy(snode, tnode, source_name, target_name);
 
 	free(source_cpy);
 	free(target_cpy);
 	
-	return 0;
+	return rv; 
 }
 
 
@@ -329,9 +361,8 @@ int info(char *path) {
 	int32_t tnode = traverse_path(path_cpy);
 	if(!tnode) return 1;
 
-	node_info(tnode, name);
-
-	return 0;
+	return node_info(tnode, name);
+	//return 0;
 }
 
 
@@ -345,9 +376,8 @@ int outcp(char *source, char *target) {
 	int32_t tnode = traverse_path(source_cpy);
 	if(!tnode) return 1;
 
-	out_copy(tnode, name, target);
-	
-	return 0;
+	return out_copy(tnode, name, target);
+	//return 0;
 }
 
 
@@ -363,7 +393,6 @@ int slink(char *source, char *link) {
 	int32_t src = traverse_path(source);
 	if(!src) return 1;
 
-	symbolic_link(src, par, name);
-
-	return 0;
+	return symbolic_link(src, par, name);
+	//return 0;
 }
