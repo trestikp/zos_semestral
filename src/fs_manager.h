@@ -1,13 +1,26 @@
 #ifndef _FS_MANAGER_H
 #define _FS_MANAGER_H
 
+/**************************************/
+/* 				      */
+/*	Includes		      */
+/*				      */
+/**************************************/
+
+
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
 #include <math.h>
 #include <sys/statvfs.h>
 #include "commands.h"
-#include "general_functions.h"
+
+/**************************************/
+/* 				      */
+/*	Function prototypes	      */
+/*				      */
+/**************************************/
+
 
 int load_filesystem();
 int format(char *size);

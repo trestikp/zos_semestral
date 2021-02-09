@@ -1,7 +1,11 @@
 #include "fs_manager.h"
-#include "commands.h"
-#include "file_system.h"
-#include "general_functions.h"
+	
+
+/**************************************/
+/* 				      */
+/*	Global variables	      */
+/*				      */
+/**************************************/
 
 
 char *fs_filename = NULL;
@@ -12,6 +16,14 @@ extern inode *position;
 extern const inode *root;
 
 bool fs_loaded = false;
+
+
+/**************************************/
+/* 				      */
+/*	Functions		      */
+/*				      */
+/**************************************/
+
 
 /*
 	Actually only loads superblock to global variable *sblock
@@ -54,6 +66,12 @@ int load_filesystem() {
 }
 
 
+/**
+	Parses @size to number and calls functions that create superblock and initialize 
+	filysystem file.
+
+	Return 0 on success. 
+*/
 int format(char *size) {
 	uint64_t max_size = 0;
 	int number = 0;
@@ -94,15 +112,6 @@ int format(char *size) {
 			print_error("Unrecognized unit.");
 			return 3;
 		}
-
-		// allow "bits" ??? 
-		/* nope I don't want to deal with bits, its stupid
-		if(units[1] == 'b') max_size /= 8;
-		else if(units[1] != 'B') {
-			print_error("Unrecognized unit.");
-			return 3;
-		}
-		*/
 	}
 
 	// if there isnt enough space on storage device for unprivileged user
@@ -127,10 +136,17 @@ int format(char *size) {
 }
 
 
+/**
+	Returns pointer offset by @offseit in string @pointer
+*/
 static inline char *pointer_offset(char *pointer, int offset) {
      return pointer + (offset * sizeof(char));
 }
 
+/**
+	Extracts first element from the end of @ppath until first '/' and saves
+	this element into @pname
+*/
 int extract(char *ppath, char **pname) {
      int len = strlen(ppath), off = len;
 
@@ -156,6 +172,10 @@ int extract(char *ppath, char **pname) {
 }
 
 
+/**
+	Not very thought through workaround to find out if target exits. Was created after 
+	change of traverse_path, which now accepts last element being file.
+*/
 int ugly_workaround_existence(char *path, int32_t target) {
 	//ugly workaround to prevent listing even when the item @name doesn't exist
 	//otherwise ls lists content of current dir, even when the final target doesn't exist
@@ -174,7 +194,9 @@ int ugly_workaround_existence(char *path, int32_t target) {
 }
 
 
-
+/**
+	Handles @path and forwards it to appropriate function. Also checks if name already exists.
+*/
 int mkdir(char *path) {
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 
@@ -203,6 +225,10 @@ int mkdir(char *path) {
 	return 0;
 }
 
+
+/**
+	Parses @path and calls appropriate function.
+*/
 int rmdir(char* path) {
 	return_error_on_condition(!fs_file, FILE_OPEN_ERROR, 7);
 	
@@ -215,6 +241,9 @@ int rmdir(char* path) {
 	//return 0;
 }
 
+/**
+	Parses @path and calls appropriate function. Tests if last element isn't file.
+*/
 int cd(char *path) {
 	int32_t target = traverse_path(path);
 
@@ -226,6 +255,10 @@ int cd(char *path) {
 	//return 0;
 }
 
+
+/**
+	Parses @path and calls appropriate function. Tests if last element isn't file.
+*/
 int ls(char *path) {
 	int32_t end_nid = 0;
 	end_nid = traverse_path(path);
@@ -238,12 +271,20 @@ int ls(char *path) {
 	//return 0;
 }
 
+
+/**
+	Calls appropriate function.
+*/
 int pwd() {
 	return print_working_dir();
 	//return 0;
 }
 
 
+/**
+	Extracts names of files in source and target and calls appropriete function with 
+	parent paths and names.
+*/
 int incp(char *source, char *target) {
 	int rv = 0;
 	char *source_name = NULL, *target_name = NULL;
@@ -266,6 +307,9 @@ int incp(char *source, char *target) {
 	return rv;
 }
 
+/**
+	Extracts name from @path and calls appropriate funciton.
+*/
 int cat(char *path) {
 	int rv = 0;
 	char *name = NULL;
@@ -284,6 +328,10 @@ int cat(char *path) {
 	return rv;
 }
 
+
+/**
+	Extracts name from @path and calls appropriate funciton.
+*/
 int rm(char *path) {
 	int rv = 0;
 	char *name = NULL;
@@ -301,6 +349,10 @@ int rm(char *path) {
 }
 
 
+/**
+	Extracts names of files in source and target and calls appropriate function with 
+	parent paths and names.
+*/
 int mv(char *source, char *target) {
 	int rv = 0;
 	char *source_name = NULL, *target_name = NULL;
@@ -327,6 +379,10 @@ int mv(char *source, char *target) {
 }
 
 
+/**
+	Extracts names of files in source and target and calls appropriate function with 
+	parent paths and names.
+*/
 int cp(char *source, char *target) {
 	int rv = 0;
 	char *source_name = NULL, *target_name = NULL;
@@ -352,6 +408,9 @@ int cp(char *source, char *target) {
 }
 
 
+/**
+	Extracts name from @path and calls appropriate funciton.
+*/
 int info(char *path) {
 	char *name = NULL;
 	char *path_cpy = calloc(strlen(path) + 1, sizeof(char));
@@ -367,6 +426,10 @@ int info(char *path) {
 }
 
 
+/**
+	Extracts names of files in source and target and calls appropriate function with 
+	parent paths and names.
+*/
 int outcp(char *source, char *target) {
 	char *name = NULL;
 	char *source_cpy = calloc(strlen(source) + 1, sizeof(char));
@@ -382,6 +445,10 @@ int outcp(char *source, char *target) {
 }
 
 
+/**
+	Extracts names of files in source and link and calls appropriate function with 
+	parent paths and names.
+*/
 int slink(char *source, char *link) {
 	char *name = NULL;
 	char *link_cpy = calloc(strlen(link) + 1, sizeof(char));

@@ -1,7 +1,10 @@
 #include "general_functions.h"
 
+/**
+	Adds new link with @data as first element in list @head
+*/
 int add_lifo(link **head, void *data) {
-	link *new = malloc(sizeof(link));
+	link *new = calloc(1, sizeof(link));
 	return_error_on_condition(!new, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
 	new->data = data;
@@ -11,8 +14,11 @@ int add_lifo(link **head, void *data) {
 	return 0;
 }
 
+/**
+	Adds new link with @data at the end of list @head
+*/
 int add_fifo(link **head, void *data) {
-	link *new = malloc(sizeof(link)), *ptr = *head;
+	link *new = calloc(1, sizeof(link)), *ptr = *head;
 	return_error_on_condition(!new, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
 	new->data = data;
@@ -28,15 +34,4 @@ int add_fifo(link **head, void *data) {
 	ptr->next = new;
 
 	return 0;
-}
-
-void free_list(link *head) {
-	link *ptr = head;
-
-	while(ptr) {
-		head = ptr;
-		ptr = ptr->next;
-		free(head->data);
-		free(head);
-	}
 }

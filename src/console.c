@@ -5,7 +5,15 @@
 
 #define TOKEN_LIMIT 50
 
+/**************************************/
+/* 				      */
+/*	Functions		      */
+/*				      */
+/**************************************/
 
+/**
+	Checks if funciton has corrct number of parameters
+*/
 uint8_t check_parameters(uint8_t expected_par_count, char* par1, char* par2) {
 	switch(expected_par_count) {
 		case 0: if(par1) return 4;
@@ -19,7 +27,12 @@ uint8_t check_parameters(uint8_t expected_par_count, char* par1, char* par2) {
 	return 0;
 }
 
+//prototype is here, becase load uses it
 uint8_t process_command(char *command_parts[3]);
+
+/**
+	Opens @file and executes commands written in file. Each line is one command.
+*/
 void load(char *file) {
 	FILE *f = fopen(file, "r");
 
@@ -85,6 +98,8 @@ void load(char *file) {
 		2: unrecognized command
 		3: too few arguments (args 1/2 is NULL with a command)
 		4: too many arguments (arg 2 is not NULL with some commands)
+		5: requers 2 parameters
+		6: cannot execute command
 */
 uint8_t process_command(char *command_parts[3]) { 
 	__attribute__ ((unused)) int ret = 0; //debugging variable, suppressing unused warning
@@ -171,6 +186,9 @@ uint8_t process_command(char *command_parts[3]) {
 	return 0;
 }
 
+/**
+	Runs custom console for this filesystem
+*/
 uint8_t run_console() {
 	char input[80] = {0}, *token, *saveptr;
 	char *command_parts[3];
