@@ -17,6 +17,8 @@ bool fs_loaded = false;
 	Actually only loads superblock to global variable *sblock
 */
 int load_filesystem() {
+	fs_loaded = false;
+
 	sblock = malloc(sizeof(superblock));
 	return_error_on_condition(!sblock, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
@@ -53,7 +55,6 @@ int load_filesystem() {
 
 
 int format(char *size) {
-	//FILE *fs_file = NULL;
 	uint64_t max_size = 0;
 	int number = 0;
 	char units[3] = {0};
@@ -120,7 +121,6 @@ int format(char *size) {
 
 	create_filesystem(max_size);
 	load_filesystem();
-	//fclose(fs_file);
 	free(vfs);
 
 	return 0;
@@ -191,9 +191,10 @@ int mkdir(char *path) {
 	int parent_id = traverse_path(dir_name);
 	if(!parent_id) return 1;
 	
-	//printf("making dir at: %d\n", parent_id);
-	//if(does_item_exist_in_dir(name_new, parent_id)) return 1;
-	if(search_dir(name_new, &parent_id) != 1) return 1;
+	if(search_dir(name_new, &parent_id) != 1) {
+		printf("EXISTS\n");
+		return 1;
+	}
 	
 	make_directory(name_new, parent_id);
 

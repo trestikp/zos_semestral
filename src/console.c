@@ -87,7 +87,7 @@ void load(char *file) {
 		4: too many arguments (arg 2 is not NULL with some commands)
 */
 uint8_t process_command(char *command_parts[3]) { 
-	int ret = 0; //debugging var?
+	__attribute__ ((unused)) int ret = 0; //debugging variable, suppressing unused warning
 
 	if(!strcmp(command_parts[0], "exit")) return 1;
 

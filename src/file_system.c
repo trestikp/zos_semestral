@@ -22,7 +22,7 @@ extern FILE *fs_file;
 
 /**************************************/
 /* 				      */
-/*	temp			      */
+/*	Functions		      */
 /*				      */
 /**************************************/
 
@@ -37,7 +37,7 @@ void print_inode_bitmap() {
 	while(address < ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8)) {
 		byte = fgetc(fs_file);
 
-		for(i = 7; i >=0; i--) {
+		for(i = 7; i >= 0; i--) {
 			if(byte & (1 << i)) {
 				printf("1");
 			} else {
@@ -52,12 +52,6 @@ void print_inode_bitmap() {
 	printf("\n");
 }
 
-
-/**************************************/
-/* 				      */
-/*	Support functions - general   */
-/*				      */
-/**************************************/
 
 /**
 	Calculates the byte address in file of a block. 
@@ -109,7 +103,7 @@ int32_t allocate_free_inode() {
 
 
 	fseek(fs_file, sblock->bitmapi_start_address, SEEK_SET);
-	while(address < ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8)) {
+	while(address <= ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8)) {
 		byte = fgetc(fs_file);
 		for(i = (sizeof(uint8_t) * 8 - 1); i >= 0; i--) {
 			if(!(byte & (1 << i))) {
@@ -123,6 +117,8 @@ int32_t allocate_free_inode() {
 			address++;
 		}
 	}
+
+	printf("ERROR: Out of inodes\n");
 
 	return 0;
 }
@@ -154,7 +150,7 @@ int32_t allocate_free_block() {
 		}
 	}
 
-	return 0;
+	return -1;
 }
 
 
@@ -204,7 +200,6 @@ int count_free_blocks() {
 
 	//TODO this might be broken
 	while(block < sblock->cluster_count) {
-	//while(block < (sblock->data_start_address - sblock->bitmap_start_address) * 8) {
 		byte = fgetc(fs_file);
 		for(i = 7; i >= 0; i--) {
 			if(!(byte & (1 << i))) count++;
@@ -212,19 +207,10 @@ int count_free_blocks() {
 		}
 	}
 
-	//TODO
-	printf("Counted %d free blocks out of %d max\n", count, sblock->cluster_count);
+	//printf("Counted %d free blocks out of %d max\n", count, sblock->cluster_count);
 	
 	return count;
 }
-
-
-/**************************************/
-/* 				      */
-/*	Support functions -	      */
-/*		command specific      */
-/*				      */
-/**************************************/
 
 
 /**
@@ -470,7 +456,7 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 		return 3;
 	}
 
-	if((cnt + additional) < block_count) {
+	if((cnt + additional) <= block_count) {
 		printf("ERROR: Not enough blocks to store data\n");
 		return 2;
 	}
@@ -482,28 +468,6 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 	if(block_count >= 3) nd->direct3 = allocate_free_block();
 	if(block_count >= 4) nd->direct4 = allocate_free_block();
 	if(block_count >= 5) nd->direct5 = allocate_free_block();
-	/*
-	if(block_count >= 1) {
-		nd->direct1 = allocate_free_block(); 
-		printf("INFO: Allocated block %d\n", nd->direct1);
-	}
-	if(block_count >= 2) {
-		nd->direct2 = allocate_free_block(); 
-		printf("INFO: Allocated block %d\n", nd->direct2);
-	}
-	if(block_count >= 3) {
-		nd->direct3 = allocate_free_block(); 
-		printf("INFO: Allocated block %d\n", nd->direct3);
-	}
-	if(block_count >= 4) {
-		nd->direct4 = allocate_free_block(); 
-		printf("INFO: Allocated block %d\n", nd->direct4);
-	}
-	if(block_count >= 5) {
-		nd->direct5 = allocate_free_block(); 
-		printf("INFO: Allocated block %d\n", nd->direct5);
-	}
-	*/
 
 	if(block_count >= 6) {
 		block_count -= 5;
@@ -585,6 +549,8 @@ int free_allocated_blocks(inode *nd) {
 			fread(&block, sizeof(int32_t), 1, fs_file);
 			count++;
 		}
+
+		free_block_in_bm_at(nd->indirect1);
 	}
 	if(nd->indirect2) { //TODO for now lets assume this works (debug it)
 		int32_t outer = 0;
@@ -610,7 +576,17 @@ int free_allocated_blocks(inode *nd) {
 			fseek(fs_file, get_block_address_from_position(outer) + count_out * sizeof(int32_t), SEEK_SET);
 			fread(&outer, sizeof(int32_t), 1, fs_file);
 		}
+
+		free_block_in_bm_at(nd->indirect2);
 	}
+
+	nd->direct1 = 0;
+	nd->direct2 = 0;
+	nd->direct3 = 0;
+	nd->direct4 = 0;
+	nd->direct5 = 0;
+	nd->indirect1 = 0;
+	nd->indirect2 = 0;
 	
 	return 0;
 }

@@ -69,7 +69,8 @@ int32_t traverse_path(char *path) {
 		ret = search_dir(token, &node_id);
 
 		if(ret == 1) {
-			printf("FILE NOT FOUND (traversing path)\n");
+			printf("PATH/ FILE NOT FOUND (traversing path)\n");
+			on_way = 2;
 			break;
 		} else if(ret == 2) {
 			on_way = 1;
@@ -130,13 +131,18 @@ void print_superblock(superblock *sb) {
 superblock *create_superblock(uint64_t max_size) {
 	int ibmp_size = 0, bbmp_size = 0;
 
+	// 6B bitmaps (+) -> 8 inodes + 40 blocks
+	int cycle_increment = 6 + (8 * sizeof(inode)) + (40 * BLOCK_SIZE);
+
+	if(max_size < cycle_increment + sizeof(superblock)) {
+		printf("ERROR: Cannot create filesystem this small\n");
+		return NULL;
+	}
+
 	superblock *sb = calloc(1, sizeof(superblock));
 	return_error_on_condition(!sb, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
 	
 	uint64_t size = sizeof(superblock);
-
-	// 6B bitmaps (+) -> 8 inodes + 40 blocks
-	int cycle_increment = 6 + (8 * sizeof(inode)) + (40 * BLOCK_SIZE);
 
 	while((size + cycle_increment) <= max_size) {
 		size += cycle_increment;
@@ -145,17 +151,16 @@ superblock *create_superblock(uint64_t max_size) {
 		bbmp_size += 5;
 	}
 
-	printf("size before block fill: %ld\n", size);
+	//printf("size before block fill: %ld\n", size);
 
 	//fill rest of free space with blocks
-	while((size + BLOCK_SIZE + 1) <= max_size) {
+	while((size + (BLOCK_SIZE * 8) + 1) <= max_size) {
+		// dont forget to add bitmap byte :)
 		bbmp_size++;
 		size++;
 
-		do{
-			size += BLOCK_SIZE;
-			sb->cluster_count++;
-		} while((size + BLOCK_SIZE) <= max_size && sb->cluster_count % 8);
+		sb->cluster_count += 8;
+		size += BLOCK_SIZE * 8;
 	}
 	
 	sb->disk_size = size;
@@ -170,9 +175,11 @@ superblock *create_superblock(uint64_t max_size) {
 	sprintf(sb->signature, DEFAULT_SIGNATURE);
 	sprintf(sb->volume_descriptor, DEFAULT_DESCRIPTION);
 
+	/*
 	printf("max size: %ld\n", max_size);
 	printf("size: %ld\n", size);
 	printf("size left: %ld\n\n", max_size - size);
+	*/
 
 	return sb;
 }
@@ -182,28 +189,35 @@ int create_filesystem(uint64_t max_size) {
 	inode *node = NULL;
 	directory_item *ditem = NULL;
 
+	printf("INFO: Creating superblock\n");
 	sblock = create_superblock(max_size);
 	return_error_on_condition(!sblock, SUPERBLOCK_CREATION_ERROR, 1);
+	printf("INFO: Done\n");
 
-	print_superblock(sblock);
+	//print_superblock(sblock);
 
+	printf("INFO: Writing superblock\n");
 	fseek(fs_file, 0, SEEK_SET);
 	fwrite(sblock, sizeof(superblock), 1, fs_file);
+	printf("INFO: Done\n");
 
-	printf("IBMP WRITE: %ld\n", ftell(fs_file));
+	printf("INFO: Writing inode bitmap\n");
+	//printf("IBMP WRITE: %ld\n", ftell(fs_file));
 	//first inode bmp byte (root)
 	fputc(0x80, fs_file);
-	//fwrite? 
 	for(i = 0; i < (sblock->bitmap_start_address - sblock->bitmapi_start_address - 1); i++) {
 		fputc(0x00, fs_file);
 	}
+	printf("INFO: Done\n");
 
-	printf("BBMP WRITE: %ld\n", ftell(fs_file));
+	printf("INFO: Writing block bitmap\n");
+	//printf("BBMP WRITE: %ld\n", ftell(fs_file));
 	//first block bmp byte(root)
 	fputc(0x80, fs_file);
 	for(i = 0; i < (sblock->inode_start_address - sblock->bitmap_start_address - 1); i++) {
 		fputc(0x00, fs_file);
 	}
+	printf("INFO: Done\n");
 
 	//first inode
 	node = calloc(1, sizeof(inode));
@@ -214,21 +228,17 @@ int create_filesystem(uint64_t max_size) {
 	node->references = 1;
 	node->file_size = BLOCK_SIZE;
 
-	printf("INODE WRITE: %ld\n", ftell(fs_file));
+	//printf("INODE WRITE: %ld\n", ftell(fs_file));
 	fwrite(node, sizeof(inode), 1, fs_file);
 
-	/*
-	node->references = 0;
-	node->isDirectory = 0;
-	node->file_size = 0;
-	*/
 	memset(node, 0x00, sizeof(inode));
 
-	//why do i do *8?? i dont remember anymore TODO
-	for(i = 1; i < ((sblock->bitmap_start_address -	sblock->bitmapi_start_address) * 8); i++) {
+	printf("INFO: Writing inodes\n");
+	for(i = 1; i < ((sblock->bitmap_start_address - sblock->bitmapi_start_address) * 8); i++) {
 		node->nodeid = i + 1;
 		fwrite(node, sizeof(inode), 1, fs_file);
 	}
+	printf("INFO: Done\n");
 
 	free(node);
 
@@ -237,13 +247,8 @@ int create_filesystem(uint64_t max_size) {
 	return_error_on_condition(!ditem, MEMORY_ALLOCATION_ERROR_MESSAGE, 2);
 
 	ditem->inode = 1;
-	/*
-	bzero(ditem->item_name, MAX_ITEM_NAME_LENGTH);
-	ditem->item_name[0] = '/';
-	*/
 
-	printf("BLOCK WRITE: %ld\n", ftell(fs_file));
-	//fwrite(ditem, sizeof(directory_item), 1, fs_file);
+	//printf("BLOCK WRITE: %ld\n", ftell(fs_file));
 
 	memcpy(ditem->item_name, "..", 1);
 	fwrite(ditem, sizeof(directory_item), 1, fs_file);
@@ -251,11 +256,12 @@ int create_filesystem(uint64_t max_size) {
 	memcpy(ditem->item_name, "..", 2);
 	fwrite(ditem, sizeof(directory_item), 1, fs_file);
 
-	//im confused, aren't there only 2 dir_items?? TODO (*2 instead *3)
-	for(i = 0; i < (sblock->cluster_size * sblock->cluster_count - sizeof(directory_item) * 3); i++) {
+	printf("INFO: Writing blocks\n");
+	for(i = 0; i < (sblock->cluster_size * sblock->cluster_count - sizeof(directory_item) * 2); i++) {
 		fputc(0x00, fs_file);
 	}
-	printf("BLOCK END: %ld\n", ftell(fs_file));
+	//printf("BLOCK END: %ld\n", ftell(fs_file));
+	printf("INFO: Done\n");
 
 	free(ditem);
 
@@ -278,10 +284,16 @@ int make_directory(char *name, int32_t parent_nid) {
 				  OUT_OF_MEMORY_ERROR);
 	 */
 
-	directory_item *di = malloc(sizeof(directory_item));
+	directory_item *di = calloc(1, sizeof(directory_item));
 	return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, OUT_OF_MEMORY_ERROR);
 
 	pos = allocate_free_inode();
+
+	if(!pos) {
+		free(di);
+		return 1;
+	}
+
 	new = load_inode_by_id(pos + 1); //id is starting from 1, pos starts from 0 -> pos + 1 = id
 	return_error_on_condition(!new, MEMORY_ALLOCATION_ERROR_MESSAGE, OUT_OF_MEMORY_ERROR);
 
@@ -289,8 +301,11 @@ int make_directory(char *name, int32_t parent_nid) {
 	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, OUT_OF_MEMORY_ERROR);
 
 	new->direct1 = allocate_free_block();
-	//TODO: free memory on condition!!
-	return_error_on_condition(!new->direct1, "failed to allocate free block", 2);
+
+	if(new->direct1 == -1) {
+		printf("ERROR: Out of blocks\n");
+		return 2;
+	}
 
 	zero_data_block(new->direct1);
 
@@ -489,7 +504,8 @@ inode *prepare_new_file_node() {
 		nd->references = 1;
 		nd->isDirectory = 0;
 	} else {
-		printf("OUT OF INODES\n");
+		//this is now done in allocate_free_inode
+		//printf("OUT OF INODES\n");
 	}
 
 	return nd;
@@ -570,8 +586,17 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 			free_allocated_blocks(nd);
 			copy_file_to_node(f, nd);
 		} else if(nd->isDirectory == 1) {
+			int32_t temp = t_node;
+			if(!search_dir(source_name, &temp)) {
+				printf("\"%s\" ALREADY EXITS\n", source_name);
+				return 3;
+			}
+			
 			parent = nd;
-			nd = prepare_new_file_node();
+			if(!(nd = prepare_new_file_node())) {
+				return 2;
+			}
+
 			copy_file_to_node(f, nd);
 			save_inode(nd);
 
@@ -586,7 +611,9 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 		}
 	} else {
 		parent = nd;
-		nd = prepare_new_file_node();
+		if(!(nd = prepare_new_file_node())) {
+			return 2;
+		}
 
 		if(copy_file_to_node(f, nd)) {
 			//theorethically there isn't need to free the inode because it wasn't
@@ -599,7 +626,11 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 
 		directory_item *di = calloc(1, sizeof(directory_item));
 		di->inode = nd->nodeid;
-		strcpy(di->item_name, source_name);
+		if(target_name) {
+			strcpy(di->item_name, target_name);
+		} else {
+			strcpy(di->item_name, source_name);
+		}
 
 		append_dir_item(di, parent);
 	}
@@ -629,6 +660,7 @@ int remove_directory(int32_t node_id) {
 
 	if(nd->isDirectory != 1) {
 		printf("ISN'T DIR\n");
+		return 4;
 	}
 
 	if((rv = is_dir_empty(nd))) { //is_dir_empty return 0 on empty, number on error
@@ -638,7 +670,6 @@ int remove_directory(int32_t node_id) {
 		}
 	}
 	
-	//remove_dir_node(nd);
 	remove_dir_node_2(nd);
 
 	free(nd);
@@ -751,25 +782,6 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	} else {
 		target_exists = 1;
 	}
-	/*
-		tgt = prepare_new_file_node();
-
-		if(!tgt) {
-			//printf("ERROR: Failed to create target. Out of inodes.");
-			free(sprnt);
-			free(tprnt);
-			free(src);
-
-			return 2;
-		}
-
-		is_new = 1;
-	} else {
-		tgt = load_inode_by_id(tgt_id);
-		return_error_on_condition(!tgt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
-	}
-	*/
-
 
 	inode *src = load_inode_by_id(src_id);
 	return_error_on_condition(!src, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
@@ -798,38 +810,29 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 		return 1;
 	}
 
-	if(tgt->isDirectory == 1) {
+	if(tgt->isDirectory == 0 || tparent == tgt->nodeid) {
+		if(target_exists) {
+			remove_dir_item(tprnt->nodeid, tgt->nodeid);
+			free_inode_with_id(tgt->nodeid);
+		}
+
+		directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
+		return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
+
+		bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
+		memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
+
+		append_dir_item(di, tprnt);
+
+		free(di);
+
+	} else if(tgt->isDirectory == 1) {
 		directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
 		return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
 		append_dir_item(di, tgt);
 
 		free(di);
-	} else if(tgt->isDirectory == 0) {
-		if(target_exists) {
-			remove_dir_item(tprnt->nodeid, tgt->nodeid);
-			free_inode_with_id(tgt->nodeid);
-
-			directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
-			return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
-
-			bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
-			memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
-
-			append_dir_item(di, tprnt);
-
-			free(di);
-		} else {
-			directory_item *di = extract_dir_item_from_dir(sprnt->nodeid, src->nodeid);
-			return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
-
-			bzero(di->item_name, MAX_ITEM_NAME_LENGTH);
-			memcpy(di->item_name, tname, MAX_ITEM_NAME_LENGTH - 1);
-
-			append_dir_item(di, tprnt);
-
-			free(di);
-		}
 	} else {
 		printf("ERROR: Unknown item\n");
 		return 1;
@@ -951,7 +954,18 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 
 
 	if(tgt->isDirectory == 1) {
-		new = prepare_new_file_node();
+		int32_t help = tgt->nodeid;
+		if(search_dir(sname, &help)) {
+			new = prepare_new_file_node();
+
+			directory_item *di = calloc(1, sizeof(directory_item));
+			di->inode = new->nodeid;
+			memcpy(di->item_name, sname, MAX_ITEM_NAME_LENGTH - 1);
+	
+			append_dir_item(di, tgt);
+		} else {
+			new = load_inode_by_id(help);
+		}
 
 		if(!new) {
 			//printf("ERROR: Failed to create target. Out of inodes.");
@@ -966,13 +980,6 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 		if(copy_file(src, new)) {
 			printf("ERROR COPYING FILE\n");
 		}
-
-		directory_item *di = calloc(1, sizeof(directory_item));
-		di->inode = new->nodeid;
-		memcpy(di->item_name, sname, MAX_ITEM_NAME_LENGTH - 1);
-
-		append_dir_item(di, tgt);
-		//save_inode(new);
 	} else if(tgt->isDirectory == 0) {
 		if(copy_file(src, tgt)) {
 			printf("ERROR COPYING FILE\n");
@@ -1089,6 +1096,8 @@ int out_copy(int32_t where, char *name, char *target) {
 		}
 	} else {
 		fclose(f);
+		remove(target);
+		printf("FILE NOT FOUND\n");
 		//printf("Failed to find %s in dir\n", name);
 		return 1;
 	}
@@ -1117,6 +1126,11 @@ int symbolic_link(int32_t src, int32_t par, char *name) {
 	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
 	inode *new = prepare_new_file_node();
+
+	if(!new) {
+		return 2;
+	}
+
 	new->isDirectory = 2;
 	new->direct1 = src;
 	new->file_size = strlen(name);
