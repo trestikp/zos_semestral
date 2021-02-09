@@ -5,7 +5,6 @@
 /**************************************/
 
 #include "commands.h"
-#include "file_system.h"
 
 /**************************************/
 /* 				      */
@@ -105,7 +104,9 @@ int32_t traverse_path(char *path) {
         return node_id;
 }
 
-//TODO: REMOVE LATER
+/**
+	Debug function to print info about superblock
+*/
 void print_superblock(superblock *sb) {
 	printf("--------\n");
 	printf("size of supeblock: %ld\n", sizeof(superblock));
@@ -126,7 +127,7 @@ void print_superblock(superblock *sb) {
 /****************/
 
 /*
-	Returns superblock structure
+	Calculates and creates superblock. Returns superblock structure.
 */
 superblock *create_superblock(uint64_t max_size) {
 	int ibmp_size = 0, bbmp_size = 0;
@@ -184,6 +185,9 @@ superblock *create_superblock(uint64_t max_size) {
 	return sb;
 }
 
+/**
+	Writes superblock and necessary information to global @fs_file. Initiliazes root node and dir items.
+*/
 int create_filesystem(uint64_t max_size) {
 	int i = 0;
 	inode *node = NULL;

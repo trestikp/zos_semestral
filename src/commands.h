@@ -1,10 +1,23 @@
 #ifndef _COMMANDS_H
 #define _COMMANDS_H
 
+/**************************************/
+/* 				      */
+/*	Includes		      */
+/*				      */
+/**************************************/
+
 #include "file_system.h"
 #include "general_functions.h"
 
 #define SUPERBLOCK_CREATION_ERROR "Failed to initialize superblock"
+
+/**************************************/
+/* 				      */
+/*	Function prototypes	      */
+/*				      */
+/**************************************/
+
 
 int create_filesystem(uint64_t max_size);
 int make_directory(char *name, int32_t parent_nid);
