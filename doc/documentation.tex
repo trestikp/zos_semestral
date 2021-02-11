@@ -94,9 +94,9 @@ A17B0380P
 
 
 \chapter{Úvod}
-Cílem této práce je vytvořit zjednodušný souborový systém (anglicky file system, dále jen (pseudo) FS) založený
+Cílem této práce je vytvořit zjednodušený souborový systém (anglicky file system, dále jen (pseudo) FS) založený
 na reálném FS i-uzlů (anglicky i-node, dále jen inode). Dále nad tímto systémem implementovat některé
-základní linuxové příkazy jako například "cd, ls" a další. Tyto příkazy jsou zadávány do konzole, která 
+základní Linuxové příkazy jako například "cd, ls" a další. Tyto příkazy jsou zadávány do konzole, která 
 bude součástí programu.
 
 Konkrétní příkazy, které mají být implementovány jsou:
@@ -110,10 +110,10 @@ Konkrétní příkazy, které mají být implementovány jsou:
 	\item cat - vypíše obsah souboru
 	\item cd - změní aktuální cestu do adresáře
 	\item pwd - vypíše aktuální cestu
-	\item info - vypíše informace o soubrou/ adresáři
+	\item info - vypíše informace o souboru/ adresáři
 	\item incp - zkopíruje soubor pevného disku do pseudo FS
 	\item outcp - zkopíruje soubor z pseudo FS na pevný disk
-	\item load - načte soubor z pevného disku a vykonavá příkazy z tohoto file
+	\item load - načte soubor z pevného disku a vykonává příkazy z tohoto file
 	\item format - formátuje soubor na pseudo FS
 	\item slink - vytvoří symbolický link
 \end{itemize}
@@ -128,7 +128,7 @@ obrázku \ref{img:fs_structure}.
 Tyto struktury jsou:
 \begin{enumerate}
 	\item blok (anglicky block) - uchovává data
-	\item inode - uchovává metadata o souboru/ adresáři
+	\item inode - uchovává informace o souboru/ adresáři a odkazy na bloky
 	\item bitmapa - mapa určující obsazenost bloků/ inode
 	\item superblock - uchovává metadata FS a adresy ostatních struktur
 \end{enumerate}
@@ -141,7 +141,7 @@ Tyto struktury jsou:
 \end{figure}
 %
 \subsection{Blok}
-Je to blok uložiště o konstantní velikosti.
+Blok je uložiště o konstantní velikosti.
 %
 \subsection{Inode}
 Je to struktura, která reprezentuje každý adresář a soubor ve FS. Uchovává základní informace o
@@ -150,10 +150,10 @@ bloky.
 
 Každý adresář má právě jeden blok a tudíž je limitovaný počet položek, které mohou být v adresáři
 uloženy. Soubory mají proměnné počty bloků, ale stále jsou limitovány maximálním počtem bloků.
-Maximální počet bloků je také spjatý s velikostí bloku.
+Tento limit je také spjatý s velikostí bloku.
 
 Na obrázku \ref{img:inode_struct} je znázorněna struktura inode. V tomto obrázku jsou indirect
-bloky až 13 a 14 odkaz inode. V této práci je ale struktura inodu zjednodušená a má pouze 5
+bloky až 13tý a 14tý odkaz inode. V této práci je ale struktura inode zjednodušená a má pouze 5
 přímých odkazů, 1 nepřímý odkaz první úrovně (odkaz 13 v obrázku) a 1 nepřímý odkaz druhé úrovně
 (odkaz 14 v obrázku).
 
@@ -171,7 +171,7 @@ Pro každý blok/ inode je v příslušné bitmapě jeden bit, který určuje zd
 na té pozici obsazený.
 %
 \subsection{Superblock}
-Mimo uchovávání metadat, jako například "podpis" tvůrce FS, uchovává umístění ostatních částí.
+Mimo uchovávání metadat, jako například "podpis" tvůrce FS, uchovává umístění (adresy) ostatních částí.
 V superblocku se uchovávají adresy bitmap, inode a bloků. Je zde také zaznamenán počet bloků
 a velikost jednoho bloku.
 %
@@ -186,10 +186,10 @@ najít soubor z aktuální pozice i z root adresáře FS.
 %
 %
 \chapter{Programátorská dokumentace}
-Program je psán v jazyce C, využítím pouze standardních knihoven.
+Program je psán v jazyce C, využitím pouze standardních knihoven.
 %
 \section{Moduly}
-Moduly do kterých je aplikce rozdělená.
+Moduly do kterých je aplikace rozdělená.
 \begin{itemize}
 	\item \texttt{main} - spouštěcí modul programu
 	\item \texttt{general\_functions} - poskytuje strukturu linked list a makra
@@ -201,15 +201,21 @@ Moduly do kterých je aplikce rozdělená.
 	\item \texttt{file\_system} - poskytuje funkce manipulující s FS a použité FS struktury
 \end{itemize}
 %
+\section{Ukládání do adresáře}
+Adresář je inode, který má alokovaný právě jeden blok. Položky adresáře jsou ukládány do tohoto bloku jako
+struktura \texttt{directory item},
+která uchovává inode ID jako \texttt{int32\_t}  a jméno inode s tímto ID, které je 12 znaků dlouhý buffer.
+Tedy 11 znaků dlouhé jméno a 12tý znak je ukončující '\textbackslash 0'.
+%
 \section{Implementace příkazů}
-Všechny příkazy jsou implementovány v modulu \texttt{commands}. Každý příkaz využívá nějákou funkci z
+Všechny příkazy jsou implementovány v modulu \texttt{commands}. Každý příkaz využívá nějakou funkci z
 modulu \texttt{file\_system}, aby vykonal akci nad FS.
 \subsection{cp}
 Prototyp: \texttt{int copy(int32\_t sparent, int32\_t tparent, char* sname, char *tname)}. Vstupy funkce
-jsou jméno zdroje (\texttt{sname}) a cíle (\texttt{tname}) a ID adresářú ve kterých se tyto jmena mají nacházet. Funkce 
+jsou jméno zdroje (\texttt{sname}) a cíle (\texttt{tname}) a ID adresářů ve kterých se tyto jména mají nacházet. Funkce 
 hledá zdroj a cíl v adresáři podle jména a podle toho, zda úspěšně najde výsledek reaguje. Pokud \texttt{sname}
 neexistuje, funkce končí chybou. Na cíl funkce reaguje podle toho, zda-li \texttt{tname} existuje, je adresář nebo
-je soubor. Pokud \texttt{tname} neexistuje, vytvoří se v adresáři s ID \texttt{tparent} soubor se jménem \texttt{tname}.
+je soubor. Pokud \texttt{tname} neexistuje, vytvoří se v adresáři s inode ID \texttt{tparent} soubor se jménem \texttt{tname}.
 Pokud je \texttt{tname} adresář vytvoří se v něm soubor se jménem \texttt{sname}. Pokud je \texttt{tname}
 existující soubor, vymažou se data souboru a nahradí se daty souboru \texttt{sname}.
 \subsection{mv}
@@ -218,11 +224,11 @@ podobně jako cp, ale funguje velmi odlišně. Protože není třeba zachovat p�
 jednoduše přesune/ přejmenuje adresářovou položku \texttt{sname} do/ na \texttt{tname}.
 \subsection{rm}
 Prototyp: \texttt{int remove\_file(int32\_t where, char *name)}. Hledá položku se jménem
-\texttt{name} v adresáři s inode ID where. Vrací chybu, pokud soubor není nalezen. Pokud je soubor nalezen,
+\texttt{name} v adresáři s inode ID \texttt{where}. Vrací chybu, pokud soubor není nalezen. Pokud je soubor nalezen,
 jsou vymazána data souboru a položka souboru z adresáře \texttt{where}.
 \subsection{mkdir}
 Prototyp: \texttt{int make\_directory(char *name, int32\_t parent\_nid)}. Načte inode s ID \texttt{parent\_nid},
-zkontroluje, zda-li jméno name již existuje a pokud neexistuje, tak vytvoří nový inode pro adresář a přidá
+zkontroluje, zda-li jméno \texttt{name} již existuje a pokud neexistuje, tak vytvoří nový inode pro adresář a přidá
 položku s \texttt{name} do načteného adresáře.
 \subsection{rmdir}
 Prototyp: \texttt{int remove\_directory(int32\_t node\_id)}. Načte inode s ID \texttt{node\_id}, zkontroluje,
@@ -232,7 +238,7 @@ Prototyp: \texttt{int list\_dir\_contents(int32\_t node\_id)}. Načte inode s ID
 jedná o adresář, načítá a vypisuje položky v něm uložené.
 \subsection{cat}
 Prototyp: \texttt{int cat\_file(int32\_t where, char *name)}. Načte inode adresáře \texttt{where} a hledá v něm 
-položku \texttt{name}. Po nalezení položky, vypíše její obsah. Načítá po velikosti bloku.
+položku \texttt{name}. Po nalezení položky, vypíše její obsah, pokud se jedná o soubor. Načítá po velikosti bloku.
 \subsection{cd}
 Prototyp: \texttt{int change\_dir(int32\_t target\_id)}. Načte inode s ID \texttt{target\_id} a pokud se jedná
 o adresář, nastaví globální proměnou \texttt{position}, která určuje aktuální pozici ve FS, na načtený inode.
@@ -252,7 +258,7 @@ Dále je načten inode s ID \texttt{t\_node}, který by měl adresář, ve kter�
 \texttt{target\_name}.
 \subsection{outcp}
 Prototyp: \texttt{int out\_copy(int32\_t where, char *name, char *target)}. Plní opačnou funkci k \textbf{incp}.
-Tedy koupíruje soubor se jménem \texttt{name} v adresáře s inode ID \texttt{where} do souboru \texttt{target}, 
+Tedy kopíruje soubor se jménem \texttt{name} v adresáři s inode ID \texttt{where} do souboru \texttt{target}, 
 který se nachází mimo pseudo FS.
 \subsection{load}
 Prototyp: \texttt{void load(char *file)}. Tento příkaz není implementován v modulu
@@ -261,21 +267,21 @@ Formát souboru je jeden příkaz na řádku. Tato funkce je implementována v m
 musí rozložit načtený vstup a volat příslušné obslužné funkce.
 \subsection{format}
 Prototyp: \texttt{int format(char *size)}. Je druhý příkaz, který není implementovaný v modulu \texttt{commands},
-ale je implementován v modulu \texttt{fs\_manager}. Je očekáván argument jako číslo s jednotkami (např. 100MB). 
-Po převední jednotek na číslo, se začne vytvářet FS do souboru, který byl zadán jako argument programu. Nejdříve
+ale je implementován v modulu \texttt{fs\_manager}. Jako argument je očekáváno číslo s jednotkami (např. 100MB). 
+Po převedení jednotek na číslo, se začne vytvářet FS do souboru, který byl zadán jako argument programu. Nejdříve
 se vytvoří struktura \texttt{superblock}, do které jsou spočítány adresy počátků ostatních částí FS. Adresy jsou
 počítány nejdříve pomocí inkrementu 1:5. Tedy 1B do bitmapy inode (8 inode v každém inkrementu) ku 5B do bitmapy
 bloků (tedy 40 bloků). Pokud již není možné do zadané velikosti FS vložit tento inkrement je zbytek místa doplněn bloky
-po 8 (tedy 1B v bitmapě bloků). Postupně se potom zapisují data do souboru. Nejdřive se zapíše \texttt{superblock},
+po 8 (tedy 1B v bitmapě bloků). Postupně se potom zapisují data do souboru. Nejdříve se zapíše \texttt{superblock},
 poté první byte inode bitmapy, kde se první inode rovnou inicializuje jako zabraný. Po doplnění 0 do začátku bitmapy
-bloků, je stejně jako u inode bitmapy první blok inicializovaný a poté doplněn 0 do inode adresy. Poté je incializován
+bloků, je stejně jako u inode bitmapy první blok inicializovaný a poté doplněn 0 do inode adresy. Poté je inicializován
 root inode s ID 1 a zapsán do souboru. Tato inode struktura je poté vynulována a dále zapisována do souboru do dosažení
 adresy bloků. Na začátku adresy bloků jsou inicializovány adresářové položky "." a ".." root adresáře a zbytek souboru
 je doplněn nulami do spočítané velikost.
-\subsection{slink}
+\subsection{slink}\label{slink_exp}
 Prototyp: \texttt{int symbolic\_link(int32\_t src, int32\_t par, char *name)}. Vytvoří nový inode, který ukazuje
 na inode ID \texttt{src}, pomocí direct1. Tento inode je uložen pod jménem \texttt{name} do adresáře s inode ID
-\texttt{par}. Podle definice se tedy jedná o "smart link", protože link je vázáný na inode ID, tedy funguje
+\texttt{par}. Podle definice se tedy jedná o "smart link", protože link je vázaný na inode ID, tedy funguje
 i při přesunutí linku do jiného adresáře nebo přejmenování zdrojového souboru/ adresáře. "Symbolic link" pouze
 ukazuje na položku v adresáři a při přesunutí nebo přejmenování zdrojového souboru/ adresáře, je link rozbit.
 %
@@ -287,14 +293,15 @@ Jedná se o konzolovou aplikaci. Se zdrojovými soubory je přidán i \textbf{ma
 překladač \textbf{gcc} a příkaz \textbf{make}. Přeložení aplikace je tedy velmi jednoduché. Stačí 
 zavolat příkaz \textbf{make} v adresáři s \textbf{makefile}.
 
-Po provední příkazu \textbf{make} je vytvořen spustitelný soubor \textbf{runfs}. Tento soubor 
+Po provedení příkazu \textbf{make} je vytvořen spustitelný soubor \textbf{runfs}. Tento soubor 
 požaduje právě jeden parametr, který odkazuje na soubor, kde bude vytvořen pseudo FS.
 %
 \section{Příkazy}
 Všechny argumenty příkazů mohou být zadány absolutní nebo relativní cestou.
 \begin{itemize}
 	\item cp s1 s2 - zkopíruje soubor s1 do/ na s2 (s2 může být adresář i soubor)
-	\item mv s1 s2 - přesune soubor s1 do/ na s2 (pokud s2 neexistuje, s1 je přejmenován na s2)
+	\item mv s1 s2 - přesune soubor s1 do/ na s2 (pokud s2 existuje, soubor s2 je odstraněn,
+		lze také využít k přejmenování)
 	\item rm s1 - smaže soubor s1
 	\item mkdir a1 - vytvoří adresář se jménem a1
 	\item rmdir a1 - smaže adresář se jménem a1
@@ -303,11 +310,12 @@ Všechny argumenty příkazů mohou být zadány absolutní nebo relativní cest
 	\item cd a1 - změní aktuální cestu do adresáře a1
 	\item pwd - vypíše aktuální cestu
 	\item info s1/ a1 - vypíše informace o souboru/ adresáři s1/ a1
-	\item incp s1 s2 - zkopíruje soubor s1 pevného disku do pseudo FS adresáře/ souboru s2
-	\item outcp s1 s2 - zkopíruje soubor s1 z pseudo FS na pevný disk do s2
-	\item load s1 - načte soubor s1 z pevného disku a vykonavá příkazy z tohoto file
+	\item incp s1 s2 - zkopíruje soubor s1 z pevného disku do adresáře/ souboru s2 v pseudo FS
+	\item outcp s1 s2 - zkopíruje soubor s1 z pseudo FS do s2 na pevném diku
+	\item load s1 - načte soubor s1 z pevného disku a vykonává příkazy z tohoto file
 	\item format xxxYY- formátuje soubor na pseudo FS, xxx je číslo a YY jsou jednotky (př. 100MB)
-	\item slink s1 name - vytvoří symbolický link se jménem name ukazující na s1
+	\item slink s1 name - vytvoří symbolický link se jménem "name" ukazující na s1
+	\item exit - ukončí program
 \end{itemize}
 
 %
@@ -316,15 +324,19 @@ Všechny argumenty příkazů mohou být zadány absolutní nebo relativní cest
 Cílem práce bylo implementovat file system založený na inode a některé základní příkazy 
 pro užití a testování tohoto FS. Oproti reálnému FS využívající inode je ale práce zjednodušena.
 
-Práce je stabilní a příkazy z většiny fungují jako příkazy systému Linux. Rozdíl je například u příkazu
-info, který má kompletně jinou funkci v Linuxu než v této práci.
+Práce je stabilní a příkazy z většiny fungují jako příkazy systému Linux. Největší rozdíl je u příkazu
+info, který má kompletně jinou funkci v Linuxu než v této práci. Příkazy incp a outcp nejsou běžné
+Linuxové příkazy. A nakonec příkaz slink je ve skutečnosti spíše "smart link" než "symbolic link" 
+(více v sekci \ref{slink_exp}).
 
-Ovšem i tak jsou na práci věci, které by se daly vylepšit. Především výkonostní věci. Příkladem může
-být přepisování souboru některým příkazem jako mv/ cp. Ve stávající implementaci, pokud cílový soubor
+Ovšem i přes správnou funkci jsou na práci věci, které by se daly vylepšit. 
+Jedná se především o výkonnostní vylepšení. Příkladem může
+být přepisování souboru některým z příkazů jako mv/ cp. Ve stávající implementaci, pokud cílový soubor
 existuje, tak jsou nejdříve odstraněny všechny reference na bloky dat tohoto souboru a pak jsou znovu
-přiděleny nové bloky. Toto je ovšem poměrně neoptimální řešení, protože pokud na příklad bude zrojový
+přiděleny nové bloky. Toto je ovšem poměrně neoptimální řešení, na příklad proto, že pokud bude zdrojový
 soubor větší než původní, tak není nutné odstranit všechny reference a znovu přidělit potřebný počet 
-bloků. Stačilo by pouze přidat počet bloků, aby bylo možné uložit zdrojový soubor a přepsat již
+bloků. Stačilo by pouze přidat počet chybějících bloků, aby bylo možné uložit zdrojový soubor a přepsat již
 alokované bloky.
+
 
 \end{document}

@@ -844,6 +844,11 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	inode *tgt = load_inode_by_id(tgt_id);
 	return_error_on_condition(!tgt, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
 
+	if(target_exists && tgt->isDirectory == 1) {
+		printf("DIR EXISTS IN TARGET\n");
+		return 4;
+	}
+
 /* probably don't want this in mv, as i might want to move the links themselves
 	if(src->isDirectory == 2) {
 		if(load_linked_node(&src)) {
