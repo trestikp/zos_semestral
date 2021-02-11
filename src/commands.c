@@ -278,6 +278,10 @@ int create_filesystem(uint64_t max_size) {
 /*		*/
 /****************/
 
+/**
+	Makes new directory in directory with id @parent_nid and name @name
+	Returns 0 on success.
+*/
 int make_directory(char *name, int32_t parent_nid) {
 	int32_t pos = 0;
 	inode *new = NULL, *parent = NULL;
@@ -347,6 +351,9 @@ int make_directory(char *name, int32_t parent_nid) {
 /*		*/
 /****************/
 
+/**
+	Prints one ls record
+*/
 void print_ls_record(inode *nd, char *name) {
 	switch(nd->isDirectory) {
 		case 0: printf("f\t"); break;
@@ -357,6 +364,11 @@ void print_ls_record(inode *nd, char *name) {
 	printf("%d\t%d\t%s\n", nd->file_size, nd->nodeid, name);
 }
 
+/**
+	Loads inode with id @node_id, then loads directory items from direct1 and loads
+	inode of every directory item and prints information about it
+	Returns 0 on success
+*/
 int list_dir_contents(int32_t node_id) {
 	uint64_t address = sblock->inode_start_address + (node_id - 1) * sizeof(inode);
 	int item_counter = 0, file_pos = 0;
@@ -415,6 +427,10 @@ int list_dir_contents(int32_t node_id) {
 /*		*/
 /****************/
 
+/**
+	Loads node with id @target_id and changes inode variable @position to loaded inode
+	Returns 0 on success
+*/
 int change_dir(int32_t target_id) {
 	inode *nd = load_inode_by_id(target_id);
 
@@ -442,6 +458,10 @@ int change_dir(int32_t target_id) {
 /*		*/
 /****************/
 
+/**
+	Backtraces from @position through ".." until root dir is reached
+	Returns 0 on success
+*/
 int print_working_dir() {
 	int fake_current = position->nodeid;
 	int child_id = 0;
@@ -449,7 +469,7 @@ int print_working_dir() {
 	inode *nd = NULL;
 
 
-	if(position->nodeid == 1) { //duck it, when in root just print "/" and be done with it
+	if(position->nodeid == 1) { //when in root just print "/" and be done with it
 		printf("/\n");
 		return 0;
 	}
@@ -494,7 +514,10 @@ int print_working_dir() {
 /*		*/
 /****************/
 
-
+/**
+	Allocates new inode and sets it up as a file node
+	Returns inode pointer on success
+*/
 inode *prepare_new_file_node() {
 	int32_t new_nd = 0;
 	inode *nd = NULL;
@@ -515,6 +538,10 @@ inode *prepare_new_file_node() {
 	return nd;
 }
 
+/**
+	Reads data from file @f and writes them to blocks of @nd inode
+	Returns 0 on success
+*/
 int copy_file_to_node(FILE *f, inode *nd) {
 	uint64_t size = 0;
 	int i = 0, read = 0;
@@ -558,6 +585,13 @@ int copy_file_to_node(FILE *f, inode *nd) {
 	return 0;
 }
 
+/**
+	Checks for existence of @target_name in directory with inode id @t_node. If target is a file
+	frees target data and copies file to the node. If target is a dir, creates new file with 
+	@source_name name and copies file to this new node.
+	
+	Returns 0 on success.
+*/
 int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) {
 	int exists = 0;
 	inode *nd = NULL, *parent = NULL;
@@ -610,7 +644,7 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 
 			append_dir_item(di, parent);
 		} else {
-			printf("UKNOWN NODE TYPE");
+			printf("UKNOWN NODE TYPE\n");
 			return 1;
 		}
 	} else {
@@ -649,6 +683,10 @@ int in_copy(char* source, int32_t t_node, char *source_name, char *target_name) 
 /*		*/
 /****************/
 
+/**
+	Removes directory with id @node_id
+	Returns 0 on success
+*/
 int remove_directory(int32_t node_id) {
 	int rv = 0;
 
@@ -674,7 +712,8 @@ int remove_directory(int32_t node_id) {
 		}
 	}
 	
-	remove_dir_node_2(nd);
+	//remove_dir_node_2(nd);
+	remove_dir_node(nd);
 
 	free(nd);
 
@@ -688,6 +727,10 @@ int remove_directory(int32_t node_id) {
 /*		*/
 /****************/
 
+/**
+	Prints file with name @name in directory with id @where to STDOUT
+	Returns 0 on success
+*/
 int cat_file(int32_t where, char *name) {
 	int rv = 0, it = 1;
 	char buffer[sblock->cluster_size + 1];
@@ -709,7 +752,7 @@ int cat_file(int32_t where, char *name) {
 			printf("CANNOT CAT DIR\n");
 
 			free(nd);
-			return 1;
+			return 2;
 		}
 		
 		while(!rv) {
@@ -720,7 +763,7 @@ int cat_file(int32_t where, char *name) {
 		}
 	} else {
 		printf("FILE NOT FOUND\n");
-		return 1;
+		return 3;
 	}
 	
 	return 0;
@@ -733,6 +776,10 @@ int cat_file(int32_t where, char *name) {
 /*		*/
 /****************/
 
+/**
+	Removes file with name @name in dir with id @where
+	Return 0 on success
+*/
 int remove_file(int32_t where, char *name) {
 	int parent = where;
 
@@ -764,7 +811,11 @@ int remove_file(int32_t where, char *name) {
 /*		*/
 /****************/
 
-
+/**
+	Moves directory item of @sname to @tname. If @tname is a file,
+	frees @tname data and overwrites its inode with @sname.
+	Returns 0 on success
+*/
 int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	int32_t tgt_id = tparent, src_id = sparent;
 	int target_exists = 0;
@@ -811,7 +862,7 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 
 	if(src->isDirectory == 1 && tgt->isDirectory != 1) {
 		printf("CANNOT MOVE DIR TO FILE\n");
-		return 1;
+		return 2;
 	}
 
 	if(tgt->isDirectory == 0 || tparent == tgt->nodeid) {
@@ -839,7 +890,7 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 		free(di);
 	} else {
 		printf("ERROR: Unknown item\n");
-		return 1;
+		return 3;
 	}
 
 	free(sprnt);
@@ -856,7 +907,10 @@ int move(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 /*		*/
 /****************/
 
-
+/**
+	Reads data from inode @source and writes them to inode @target
+	Returns 0 on success
+*/
 int copy_file(inode *source, inode *target) {
 	int rv = 0, it = 1;
 	int block_count = source->file_size / sblock->cluster_size + 1;
@@ -888,6 +942,11 @@ int copy_file(inode *source, inode *target) {
 }
 
 
+/**
+	Copies file @sname from dir @sparent to @tname in dir @tparent. If @tname is
+	a file, frees existing @tname data and copies @sname data to it.
+	Returns 0 on success
+*/
 int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	int32_t tgt_id = tparent, src_id = sparent;
 	int is_new = 0;
@@ -918,7 +977,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	
 	if(src->isDirectory) {
 		printf("CANNOT COPY DIRECTORY\n");
-		return 1;
+		return 2;
 	}
 
 	//int block_count = src->file_size / sizeof(sblock->cluster_size) + 1;
@@ -939,7 +998,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 			free(tprnt);
 			free(src);
 
-			return 2;
+			return 5;
 		}
 
 		is_new = 1;
@@ -952,7 +1011,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 	if(tgt->isDirectory == 2) { // link, (as above)
 		if(load_linked_node(&tgt)) {
 			printf("ERROR: Failed to load linked node\n");
-			return 3;
+			return 6;
 		}
 	}
 
@@ -978,7 +1037,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 			free(src);
 			free(tgt);
 
-			return 2;
+			return 7;
 		}
 
 		if(copy_file(src, new)) {
@@ -999,7 +1058,7 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 		}
 	} else {
 		printf("ERROR: Unknown item\n");
-		return 1;
+		return 8;
 	}
 
 	free(sprnt);
@@ -1017,7 +1076,9 @@ int copy(int32_t sparent, int32_t tparent, char* sname, char *tname) {
 /*		*/
 /****************/
 
-
+/**
+	Prints information about inode @name in @where dir
+*/
 int node_info(int32_t where, char *name) {
 	int node_id = where;
 
@@ -1034,7 +1095,7 @@ int node_info(int32_t where, char *name) {
 		if(node->isDirectory == 2) { // link , TODO do i want links on info?
 			if(load_linked_node(&node)) {
 				printf("ERROR: Failed to load linked node\n");
-				return 1;
+				return 2;
 			}
 		}
 
@@ -1051,7 +1112,10 @@ int node_info(int32_t where, char *name) {
 /*		*/
 /****************/
 
-
+/**
+	Reads data of @name file in dir @where and writes them to file @target
+	Returns 0 on success
+*/
 int out_copy(int32_t where, char *name, char *target) {
 	FILE *f = fopen(target, "wb");
 
@@ -1103,7 +1167,7 @@ int out_copy(int32_t where, char *name, char *target) {
 		remove(target);
 		printf("FILE NOT FOUND\n");
 		//printf("Failed to find %s in dir\n", name);
-		return 1;
+		return 2;
 	}
 
 	fclose(f);
@@ -1117,7 +1181,10 @@ int out_copy(int32_t where, char *name, char *target) {
 /*		*/
 /****************/
 
-
+/**
+	Creates new inode with @name pointing to @src. @src id is stored to direct1
+	Returns 0 on success
+*/
 int symbolic_link(int32_t src, int32_t par, char *name) {
 	int32_t id = par;
 	

@@ -13,7 +13,8 @@ file_sytem:
 	${CC} ${PARAMS} -c src/file_system.c
 
 fs_manager:
-	${CC} ${PARAMS} -c -lm src/fs_manager.c
+	#${CC} ${PARAMS} -c -lm src/fs_manager.c
+	${CC} ${PARAMS} -c src/fs_manager.c
 
 commands:
 	${CC} ${PARAMS} -c src/commands.c

@@ -1,6 +1,13 @@
 ﻿#ifndef _FILE_SYSTEM_H
 #define _FILE_SYSTEM_H
 
+/**************************************/
+/* 				      */
+/*	Includes		      */
+/*				      */
+/**************************************/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -26,6 +33,13 @@
 
 //1 for indirect1, 1 for indirect2, rest to fill indirect2
 #define MAX_NUMBER_OF_ADDITIONAL (2 + (sblock->cluster_size / sizeof(int32_t)))
+
+/**************************************/
+/* 				      */
+/*	Structures		      */
+/*				      */
+/**************************************/
+
 
 typedef struct super_block {
     char signature[9];              //login autora FS
@@ -60,14 +74,12 @@ typedef struct directory__item {
     char item_name[12];              //8+3 + /0 C/C++ ukoncovaci string znak
 } directory_item;
 
-/*
-superblock *sblock = NULL;
-inode *position = NULL;
-const inode *root = NULL;
-extern char *fs_filename;
-extern FILE *fs_file;
-*/
 
+/**************************************/
+/* 				      */
+/*	Structures		      */
+/*				      */
+/**************************************/
 
 inode *load_inode_by_id(int32_t node_id);
 uint64_t get_block_address_from_position(int32_t position);
@@ -76,26 +88,20 @@ int32_t allocate_free_block();
 void save_inode(inode *nd);
 int free_inode_with_id(int32_t node_id);
 directory_item *extract_dir_item_from_dir(int32_t where, int32_t item_id);
-directory_item *extract_dir_item_from_dir_2(inode *nd);
 uint64_t get_dir_item_address(inode *parent, int32_t id);
 int load_linked_node(inode **nd);
 
-//int create_filesystem(uint64_t max_size);
-//int make_directory(char *name, int32_t parent_nid);
-//int list_dir_contents(int32_t node_id );
 int search_dir(char *name, int32_t *from_nid);
-//int search_dir(char *name, int32_t from_nid);
 directory_item *find_dir_item_by_id(inode *nd, int32_t node_id);
 int append_dir_item(directory_item *di, inode *node);
 int allocate_blocks_for_file(inode *nd, int block_count);
 int free_allocated_blocks(inode *nd);
 int is_dir_empty(inode *nd);
 int remove_dir_node(inode *nd);
-int remove_dir_node_2(inode *nd);
+//int remove_dir_node_2(inode *nd);
 int remove_dir_item(int32_t parent_nid, int32_t di_nid);
 void zero_data_block(int32_t block);
-void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int block_num);
-//int read_data_to_buffer(char *buffer[BLOCK_SIZE], inode *nd, int32_t block_num);
+void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num);
 int read_data_to_buffer(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num);
 
 

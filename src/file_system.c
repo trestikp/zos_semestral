@@ -26,6 +26,9 @@ extern FILE *fs_file;
 /*				      */
 /**************************************/
 
+/**
+	Prints inode bitmap
+*/
 void print_inode_bitmap() {
 	int32_t address = 0;
 	uint8_t byte = 0x00;
@@ -83,12 +86,13 @@ inode *load_inode_by_id(int32_t node_id) {
 	return nd;
 }
 
-
+/**
+	Writes node *nd to its position in file
+*/
 void save_inode(inode *nd) {
 	fseek(fs_file, get_inode_address_from_id(nd->nodeid), SEEK_SET);
 	fwrite(nd, sizeof(inode), 1, fs_file);
 }
-
 
 /*
 	Finds and allocates* free inode in bitmap
@@ -191,6 +195,10 @@ int free_block_in_bm_at(int32_t position) {
 }
 
 
+/**
+	Couts number of free iblocks from bitmap
+	Returns number of free blocks
+*/
 int count_free_blocks() {
 	int count = 0, i = 0;
 	uint8_t byte = 0x00;
@@ -198,7 +206,6 @@ int count_free_blocks() {
 
 	fseek(fs_file, sblock->bitmap_start_address, SEEK_SET);
 
-	//TODO this might be broken
 	while(block < sblock->cluster_count) {
 		byte = fgetc(fs_file);
 		for(i = 7; i >= 0; i--) {
@@ -217,6 +224,7 @@ int count_free_blocks() {
 	Goes through block for @node loading directory_item structure until it finds 0
 	or reaches maximum number of directory_item for one block. Appends @di (new
 	directory_item) after last element (unless maximum number is reached)
+	Returns 0 on success
 */
 int append_dir_item(directory_item *di, inode *node) {
 	int counter = 0;
@@ -260,6 +268,7 @@ int append_dir_item(directory_item *di, inode *node) {
 
 /**
 	Searches for name in directory with inodeid = from_nid
+	Returns 0 on success
 */
 int search_dir(char *name, int32_t *from_nid) {
 	int item_counter = 0;
@@ -325,14 +334,18 @@ int free_inode_with_id(int32_t node_id) {
 	return 0;
 }
 
-
+/**
+	Writes @buffer to block with number @block
+*/
 void write_buffer_to_block(char buffer[sblock->cluster_size], int32_t block) {
 	fseek(fs_file, get_block_address_from_position(block), SEEK_SET);
 	fwrite(buffer, sizeof(char), sblock->cluster_size, fs_file);
 }
 
-
-void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int block_num) {
+/**
+	Writes @buffer to block with @block_num of inode @nd
+*/
+void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num) {
 	int32_t block = 0;
 
 	//number of blocks that fit in one block
@@ -372,12 +385,17 @@ void write_data_to_block(char buffer[BLOCK_SIZE], inode *nd, int block_num) {
 	}
 }
 
-
+/**
+	Reads block with number @block to @buffer
+*/
 void read_block_to_buffer(char buffer[sblock->cluster_size], int32_t block) {
 	fseek(fs_file, get_block_address_from_position(block), SEEK_SET);
 	fread(buffer, sizeof(char), sblock->cluster_size, fs_file);
 }
 
+/**
+
+*/
 int read_data_to_buffer(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num) {
 	int32_t block = 0;	
 
@@ -410,8 +428,6 @@ int read_data_to_buffer(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num) {
 	}
 
 	if(block) {
-		//printf("\n\nREADING DATA FROM BLOCK %d\n\n", block);
-
 		read_block_to_buffer(buffer, block);
 
 		/*
@@ -424,7 +440,9 @@ int read_data_to_buffer(char buffer[BLOCK_SIZE], inode *nd, int32_t block_num) {
 	} else return 1;
 }
 
-
+/**
+	Zeroes block number @block
+*/
 void zero_data_block(int32_t block) {
 	int i = 0; 
 
@@ -435,7 +453,10 @@ void zero_data_block(int32_t block) {
 	}
 }
 
-
+/**
+	Allocates @block_count to inode @nd
+	Returns 0 on success
+*/
 int allocate_blocks_for_file(inode *nd, int block_count) {
 	int i = 0, cnt = 0, additional = 0;
 	int32_t blocks[sblock->cluster_size / sizeof(int32_t)];
@@ -529,7 +550,8 @@ int allocate_blocks_for_file(inode *nd, int block_count) {
 
 
 /**
-	Sets blocks in bitmap allocated by @nd to 0 -> "removing" data
+	Sets blocks in bitmap allocated by @nd to 0 -> "removing" data and zeroes block references of @nd
+	Return 0 on success
 */
 int free_allocated_blocks(inode *nd) {
 	int count = 0;
@@ -591,10 +613,12 @@ int free_allocated_blocks(inode *nd) {
 	return 0;
 }
 
+/**
+	Returns directory item pointer of node with @node_id located in @nd
+*/
 directory_item *find_dir_item_by_id(inode *nd, int32_t node_id) {
 	int item_counter = 0;
 
-	//TODO: free nd
 	directory_item *di = calloc(1, sizeof(directory_item));
 	return_error_on_condition(!di, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL); 
 
@@ -631,74 +655,9 @@ int is_dir_empty(inode *nd) {
 
 /**
 	Removes inode @nd and removes this inode from parents directory_items
+	Returns 0 on success
 */
 int remove_dir_node(inode *nd) {
-	int32_t parent_id = nd->nodeid;
-	int count = 0, i = 0;
-	inode *parent = NULL;
-	directory_item *di = calloc(1, sizeof(directory_item));
-	link *head = NULL;
-	
-	if(search_dir("..", &parent_id)) {
-		printf("Error: Failed to find parent dir");
-		return 1;
-	}
-
-	parent = load_inode_by_id(parent_id);
-	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, 1);
-	
-	// skip "." and ".."
-	fseek(fs_file, get_block_address_from_position(parent->direct1) + sizeof(directory_item) * 2, SEEK_SET);
-	fread(di, sizeof(directory_item), 1, fs_file);
-
-	while(di->inode && count < MAX_DIR_ITEMS_IN_BLOCK) {
-		if(di->inode != nd->nodeid) add_fifo(&head, di);
-
-		fread(di, sizeof(directory_item), 1, fs_file);
-		count++;
-	}
-
-	fseek(fs_file, get_block_address_from_position(parent->direct1) + sizeof(directory_item) * 2, SEEK_SET);
-	while(head) {
-		fwrite(head->data, sizeof(directory_item), 1, fs_file);
-
-		free(head->data);
-		link *temp = head;
-		head = head->next;
-		free(temp);
-	}
-
-	//there should be one item, that isn't overwritten because of the removal
-	//this sets it to 0
-	for(i = 0; i < sizeof(directory_item); i++) {
-		fputc(0x00, fs_file);
-	}
-
-
-	// a lot of IO operation solution
-	/*
-	fread(di, sizeof(directory_item), 1, fs_file);
-
-	while(di->inode != nd->nodeid) {
-		fread(di, sizeof(directory_item), 1, fs_file);
-	}
-
-	fread(di, sizeof(directory_item), 1, fs_file);
-	do {
-		fseek(fs_file, -2 * sizeof(directory_item), SEEK_CUR);
-		fwrite(di, sizeof(directory_item), 1, fs_file);
-		fseek(fs_file, sizeof(directory_item), SEEK_CUR);
-		fread(di, sizeof(directory_item), 1, fs_file);
-	} while(di->inode != 0);
-	*/
-	
-	free_block_in_bm_at(nd->direct1);
-	free_inode_with_id(nd->nodeid);
-
-	return 0;
-}
-
-int remove_dir_node_2(inode *nd) {
 	int32_t parent_id = nd->nodeid;
 	inode *parent = NULL;
 	int i = 0, count = 0, passed = 0;
@@ -745,6 +704,10 @@ int remove_dir_node_2(inode *nd) {
 	return 0;
 }
 
+/**
+	Removes node with id @di_nid and removes it from dir items of node @parent_nid
+	Returns 0 on success
+*/
 int remove_dir_item(int32_t parent_nid, int32_t di_nid) {
 	int i = 0, count = 0, passed = 0;
 	directory_item content[MAX_DIR_ITEMS_IN_BLOCK] = {0}, di;
@@ -791,6 +754,9 @@ int remove_dir_item(int32_t parent_nid, int32_t di_nid) {
 	return 0;
 }
 
+/**
+	Extracts directory item with @item_id from directory @where
+*/
 directory_item *extract_dir_item_from_dir(int32_t where, int32_t item_id) { 
 	int i = 0, count = 0, passed = 0;
 	directory_item content[MAX_DIR_ITEMS_IN_BLOCK] = {0}, di;
@@ -830,51 +796,9 @@ directory_item *extract_dir_item_from_dir(int32_t where, int32_t item_id) {
 	return res;
 }
 
-directory_item *extract_dir_item_from_dir_2(inode *nd) { 
-	int32_t parent_id = nd->nodeid;
-	inode *parent = NULL;
-	int i = 0, count = 0, passed = 0;
-	directory_item content[MAX_DIR_ITEMS_IN_BLOCK] = {0}, di;
-	directory_item *res = calloc(1, sizeof(directory_item));
-
-	if(search_dir("..", &parent_id)) {
-		printf("ERROR: Failed to find parent dir");
-		return NULL;
-	}
-
-	parent = load_inode_by_id(parent_id);
-	return_error_on_condition(!parent, MEMORY_ALLOCATION_ERROR_MESSAGE, NULL);
-
-	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
-	for(i = 0; i < MAX_NUMBER_OF_ADDITIONAL; i++) {
-		fread(&di, sizeof(directory_item), 1, fs_file);
-
-		if(!di.inode) break;
-
-		if(passed) {
-			content[i - 1] = di;
-		} else {
-			if(di.inode == nd->nodeid) {
-				passed = 1;
-				memcpy(res, &di, sizeof(directory_item));
-			} else {
-				content[i] = di;
-			}
-		}
-
-		count++;
-	}
-
-	zero_data_block(parent->direct1);
-	fseek(fs_file, get_block_address_from_position(parent->direct1), SEEK_SET);
-	fwrite(content, sizeof(directory_item), count, fs_file);
-
-	free(parent);
-
-	return res;
-}
-
-
+/**
+	Gets address of node with @id in dir @parent
+*/
 uint64_t get_dir_item_address(inode *parent, int32_t id) {
 	int i = 0;
 	directory_item di;
@@ -891,6 +815,9 @@ uint64_t get_dir_item_address(inode *parent, int32_t id) {
 	return 0;
 }
 
+/**
+	If node *nd is sym link, loads target of the link
+*/
 int load_linked_node(inode **nd) {
 	if((*nd)->isDirectory == 2) {
 		int32_t new_id = (*nd)->direct1;
